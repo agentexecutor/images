@@ -3,11 +3,6 @@
 How we cut a release of the images in this repository. It's short on purpose:
 we're early, and this will change as we learn what we need.
 
-> **Status:** the release workflow is still in review
-> ([#11](https://github.com/agentexecutor/images/pull/11)). Until it merges,
-> pushing a tag publishes nothing. The steps below describe how a release works
-> once it has landed.
-
 ## Where we are
 
 - **There is no release cadence.** We cut a release when somebody needs one.
