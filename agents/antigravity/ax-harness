@@ -24,17 +24,19 @@
 #   AX_MCP_CONFIG_FILE  optional path to the Workspace's MCP servers as
 #                       {"mcpServers": {...}}; each is registered with
 #                       `agy mcp add` before the task runs
-#   AX_SESSION_FILE     optional path to spec.sessionId; when non-empty, HOME
-#                       is isolated under <workspace>/.ax/sessions/<sessionId>
-#                       so conversation state survives suspend/resume and
-#                       follow-up turns resume with --continue
+#   AX_SESSION_FILE     optional path to spec.sessionId; when non-empty,
+#                       ~/.gemini/antigravity-cli is symlinked to
+#                       <workspace>/.ax/sessions/<sessionId> so conversation
+#                       state survives suspend/resume and follow-up turns resume
+#                       with --continue while keeping HOME intact
 #   AX_OUTPUT_FILE      optional path the agent's final answer is written to
 #                       (AX reports it as status.outcome.output)
 #   cwd                 the task's workspace
 #
 # Optional environment variables:
-#   AX_SESSION_HOME      override the session HOME directory when AX_SESSION_FILE
-#                        is set (default: <workspace>/.ax/sessions/<sessionId>)
+#   AX_SESSION_DIR       override the durable session directory when
+#                        AX_SESSION_FILE is set (default:
+#                        <workspace>/.ax/sessions/<sessionId>)
 #   AGY_RUNTIME_INSTALL  "true" to install agy at startup when the image does
 #                        not include it (needs egress to storage.googleapis.com)
 #   AGY_VERSION          version installed at runtime; must be pinned in
@@ -61,23 +63,34 @@ if [[ -n "${session_file}" && -s "${session_file}" ]]; then
   session_id="$(tr -d '\r\n' < "${session_file}")"
 fi
 
-# When a session ID is present, keep HOME under the durable workspace so agy's
-# conversation store survives suspend/resume and is shared across turns of the
-# same session.
+export HOME="${HOME:-/root}"
+
+# When a session ID is present, symlink ~/.gemini/antigravity-cli into the
+# durable workspace so agy's conversation store survives suspend/resume and is
+# shared across turns of the same session, without hiding tool configs under
+# HOME (such as ~/.gitconfig, ~/.ssh, or ~/.config/gcloud).
 resume_session="false"
 if [[ -n "${session_id}" ]]; then
   if [[ ! "${session_id}" =~ ^[A-Za-z0-9._-]+$ || "${session_id}" == "." || "${session_id}" == ".." ]]; then
     echo "ax-harness: invalid session ID ${session_id:?} in ${session_file}" >&2
     exit 2
   fi
-  export HOME="${AX_SESSION_HOME:-${PWD}/.ax/sessions/${session_id}}"
-  mkdir -p "${HOME}"
-  if [[ -d "${HOME}/.gemini/antigravity-cli/conversations" ]] && \
-     [[ -n "$(ls -A "${HOME}/.gemini/antigravity-cli/conversations" 2>/dev/null || true)" ]]; then
+  session_dir="${AX_SESSION_DIR:-${PWD}/.ax/sessions/${session_id}}"
+  mkdir -p "${session_dir}" "${HOME}/.gemini"
+  agy_data_dir="${HOME}/.gemini/antigravity-cli"
+  if [[ "${agy_data_dir}" != "${session_dir}" ]]; then
+    if [[ -e "${agy_data_dir}" && ! -L "${agy_data_dir}" ]]; then
+      if [[ -d "${agy_data_dir}" ]] && [[ -z "$(ls -A "${session_dir}" 2>/dev/null || true)" ]]; then
+        cp -a "${agy_data_dir}/." "${session_dir}/"
+      fi
+      rm -rf "${agy_data_dir}"
+    fi
+    ln -sfn "${session_dir}" "${agy_data_dir}"
+  fi
+  if [[ -d "${session_dir}/conversations" ]] && \
+     [[ -n "$(ls -A "${session_dir}/conversations" 2>/dev/null || true)" ]]; then
     resume_session="true"
   fi
-else
-  export HOME="${HOME:-/root}"
 fi
 install_dir="${AGY_INSTALL_DIR:-${PWD}/.ax/bin}"
 # Appended, so an agy installed in the image always wins over a leftover
@@ -247,6 +260,8 @@ for f in "${AX_OUTPUT_FILE:-}" "${parsed[0]}"; do
     continue
   fi
   mkdir -p "$(dirname "${f}")"
+  # Remove any stale temp outputs left behind if an earlier run was killed mid-turn.
+  rm -f -- "${f}.tmp."*
   outputs+=("${f}")
   tmp_outputs+=("${f}.tmp.$$")
 done
