@@ -24,7 +24,8 @@ Pushing a `vMAJOR.MINOR.PATCH[-PRERELEASE]` tag runs the **Release Images**
 workflow. It builds each image for linux/amd64 and linux/arm64 and pushes it to
 `ghcr.io/agentexecutor/<image>:<tag>`.
 
-- **Published:** `antigravity` and the `mock-gemini` test server.
+- **Published:** `antigravity` and `mock-gemini-api`, the fake Gemini API server
+  used for testing (built from `fakes/mock-gemini`).
 - **Not published:** anything for Anthropic. We aren't doing Anthropic at all
   to start with, so `claude-code` and the `mock-anthropic` test server are
   left out.
