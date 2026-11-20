@@ -66,6 +66,12 @@ spec:
 
 The answer is reported as the task's `status.outcome.output`.
 
+> **Memory sizing:** The `/workspace` durable volume is memory-backed, so
+> `agy`'s conversation history and logs under `<workspace>/.ax/sessions/<id>`
+> (plus a runtime-installed `agy` binary under `<workspace>/.ax/bin`) count
+> against `resources.limits.memory`. Keep at least `2Gi`–`4Gi` (the default
+> `512Mi` is too small once `agy` and session state live in `/workspace`).
+
 ## Interactive Use (`ax ssh`)
 
 An `ax ssh` session never runs the launcher, so it gets none of the setup
@@ -80,6 +86,13 @@ export SSL_CERT_FILE=/run/ate/egress-trust-bundle/trust-bundle.pem  # trust the 
 agy --settings='{"modelProvider":"gemini"}'                         # with GEMINI_API_KEY set
 ```
 
+To continue an earlier goal task's session interactively from `ax ssh`:
+
+```bash
+mkdir -p ~/.gemini && ln -sfn /workspace/.ax/sessions/<sessionId> ~/.gemini/antigravity-cli
+agy --continue
+```
+
 ## Launcher Contract (`/usr/local/bin/ax-harness`)
 
 The mounted AX runner prepares `/workspace`, writes task inputs to files, and
@@ -91,8 +104,8 @@ invokes `/usr/local/bin/ax-harness` with `/workspace` as the working directory
   - `outputFile` — Optional extra path where `agy`'s answer is also written.
   - `settings` — Merged into `--settings=<JSON>`.
 - `AX_MCP_CONFIG_FILE` *(optional)* — Path to the Workspace's MCP servers (`{"mcpServers": {...}}`). Each `http` (`url`) or `stdio` (`command` + `args`) server is registered with `agy mcp add` before the task runs; a malformed file fails the task.
-- `AX_OUTPUT_FILE` *(optional)* — Path where `agy`'s final answer is written atomically on exit (AX reports it as `status.outcome.output`). The answer is always printed to stdout/logs as well, and `ax-harness` exits with `agy`'s exit code.
-- `AX_SESSION_FILE` *(optional)* — Path to `spec.sessionId`. When non-empty, `ax-harness` isolates `HOME` under `<workspace>/.ax/sessions/<sessionId>` (overridable via `AX_SESSION_HOME`) on the durable workspace volume so conversation state survives suspend/resume, and passes `--continue` when resuming an existing conversation in that session (unless `spec.config` already sets `continue` or `conversation`).
+- `AX_OUTPUT_FILE` *(optional)* — Path where `agy`'s final answer is written atomically on exit (AX reports it as `status.outcome.output`); stale `<output>.tmp.*` files from interrupted runs are cleaned up at startup. The answer is always printed to stdout/logs as well, and `ax-harness` exits with `agy`'s exit code.
+- `AX_SESSION_FILE` *(optional)* — Path to `spec.sessionId`. When non-empty, `ax-harness` keeps `HOME` intact (preserving `~/.gitconfig`, `~/.ssh`, etc.), symlinks `~/.gemini/antigravity-cli` to `<workspace>/.ax/sessions/<sessionId>` (overridable via `AX_SESSION_DIR`) on the durable workspace volume so conversation state survives suspend/resume, and passes `--continue` when resuming an existing conversation in that session (unless `spec.config` already sets `continue` or `conversation`).
 - **Defaults:** `--dangerously-skip-permissions` (headless runs cannot answer interactive prompts) and `--add-dir=<cwd>` (so relative file-tool paths resolve inside `/workspace`).
 - **Authentication:**
   - When `GEMINI_API_KEY` is set (and `AGY_ADC_AUTH` is unset), `ax-harness` automatically sets `"modelProvider": "gemini"` in `--settings`; `GOOGLE_GEMINI_BASE_URL` optionally points requests at a gateway or mock endpoint.

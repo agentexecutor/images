@@ -33,6 +33,8 @@ EOF
 chmod +x "${TMP}/fake-agy"
 export FAKE_AGY_LOG="${TMP}/agy-calls.log"
 
+mkdir -p "${TMP}/testhome"
+
 run_case() {
   local cfg="$1"
   shift
@@ -40,7 +42,8 @@ run_case() {
   printf '%s' "${cfg}" >"${TMP}/config.json"
   (
     cd "${TMP}"
-    env -u GEMINI_API_KEY -u AGY_ADC_AUTH -u AX_OUTPUT_FILE -u AX_MCP_CONFIG_FILE -u AX_SESSION_FILE -u AX_SESSION_HOME "$@" \
+    env -u GEMINI_API_KEY -u AGY_ADC_AUTH -u AX_OUTPUT_FILE -u AX_MCP_CONFIG_FILE -u AX_SESSION_FILE -u AX_SESSION_DIR \
+      HOME="${TMP}/testhome" "$@" \
       AX_GOAL_FILE="${TMP}/goal.md" \
       AX_CONFIG_FILE="${TMP}/config.json" \
       AGY_BIN="${TMP}/fake-agy" \
@@ -277,39 +280,68 @@ rc=$?
 set -e
 test "${rc}" -ne 0
 
-# 15. AX_SESSION_FILE isolates HOME under <workspace>/.ax/sessions/<id> and
-#     omits --continue on Turn 1, then passes --continue once conversation
-#     state exists in that session directory.
+# 15. AX_SESSION_FILE preserves HOME (e.g. ~/.gitconfig) while symlinking
+#     ~/.gemini/antigravity-cli to <workspace>/.ax/sessions/<id>, omits
+#     --continue on Turn 1, and passes --continue once conversation state exists.
 cat >"${TMP}/home-agy" <<'EOF'
 #!/usr/bin/env python3
 import json, os, sys
-print(json.dumps({"home": os.environ.get("HOME"), "args": sys.argv[1:]}))
+home = os.environ.get("HOME", "")
+link = os.path.join(home, ".gemini", "antigravity-cli")
+print(json.dumps({
+    "home": home,
+    "has_gitconfig": os.path.isfile(os.path.join(home, ".gitconfig")),
+    "link_target": os.readlink(link) if os.path.islink(link) else "",
+    "args": sys.argv[1:],
+}))
 EOF
 chmod +x "${TMP}/home-agy"
+mkdir -p "${TMP}/userhome"
+printf '[user]\n\tname = test\n' >"${TMP}/userhome/.gitconfig"
 printf 'sess-42\n' >"${TMP}/session-id"
 turn1="$(
   cd "${TMP}"
-  env -u GEMINI_API_KEY -u AGY_ADC_AUTH -u AX_OUTPUT_FILE -u AX_MCP_CONFIG_FILE -u AX_SESSION_HOME \
+  env -u GEMINI_API_KEY -u AGY_ADC_AUTH -u AX_OUTPUT_FILE -u AX_MCP_CONFIG_FILE -u AX_SESSION_DIR \
+    HOME="${TMP}/userhome" \
     AX_GOAL_FILE="${TMP}/goal.md" \
     AX_SESSION_FILE="${TMP}/session-id" \
     AGY_BIN="${TMP}/home-agy" \
     "${DIR}/ax-harness"
 )"
 check_eq "session-turn-1" "${turn1}" \
-  "{\"home\":\"${TMP}/.ax/sessions/sess-42\",\"args\":[\"--add-dir=${TMP}\",\"--dangerously-skip-permissions\",\"--print=Reply with MOCK_OK.\"]}"
+  "{\"home\":\"${TMP}/userhome\",\"has_gitconfig\":true,\"link_target\":\"${TMP}/.ax/sessions/sess-42\",\"args\":[\"--add-dir=${TMP}\",\"--dangerously-skip-permissions\",\"--print=Reply with MOCK_OK.\"]}"
 
-mkdir -p "${TMP}/.ax/sessions/sess-42/.gemini/antigravity-cli/conversations"
-touch "${TMP}/.ax/sessions/sess-42/.gemini/antigravity-cli/conversations/conv.db"
+mkdir -p "${TMP}/.ax/sessions/sess-42/conversations"
+touch "${TMP}/.ax/sessions/sess-42/conversations/conv.db"
 turn2="$(
   cd "${TMP}"
-  env -u GEMINI_API_KEY -u AGY_ADC_AUTH -u AX_OUTPUT_FILE -u AX_MCP_CONFIG_FILE -u AX_SESSION_HOME \
+  env -u GEMINI_API_KEY -u AGY_ADC_AUTH -u AX_OUTPUT_FILE -u AX_MCP_CONFIG_FILE -u AX_SESSION_DIR \
+    HOME="${TMP}/userhome" \
     AX_GOAL_FILE="${TMP}/goal.md" \
     AX_SESSION_FILE="${TMP}/session-id" \
     AGY_BIN="${TMP}/home-agy" \
     "${DIR}/ax-harness"
 )"
 check_eq "session-turn-2" "${turn2}" \
-  "{\"home\":\"${TMP}/.ax/sessions/sess-42\",\"args\":[\"--add-dir=${TMP}\",\"--continue\",\"--dangerously-skip-permissions\",\"--print=Reply with MOCK_OK.\"]}"
+  "{\"home\":\"${TMP}/userhome\",\"has_gitconfig\":true,\"link_target\":\"${TMP}/.ax/sessions/sess-42\",\"args\":[\"--add-dir=${TMP}\",\"--continue\",\"--dangerously-skip-permissions\",\"--print=Reply with MOCK_OK.\"]}"
+
+# 15b. Pre-existing non-symlink ~/.gemini/antigravity-cli is migrated into an
+#      empty session directory and replaced by a symlink.
+mkdir -p "${TMP}/migratehome/.gemini/antigravity-cli"
+printf 'keep' >"${TMP}/migratehome/.gemini/antigravity-cli/marker.txt"
+printf 'sess-migrate\n' >"${TMP}/session-migrate"
+migrated="$(
+  cd "${TMP}"
+  env -u GEMINI_API_KEY -u AGY_ADC_AUTH -u AX_OUTPUT_FILE -u AX_MCP_CONFIG_FILE -u AX_SESSION_DIR \
+    HOME="${TMP}/migratehome" \
+    AX_GOAL_FILE="${TMP}/goal.md" \
+    AX_SESSION_FILE="${TMP}/session-migrate" \
+    AGY_BIN="${TMP}/home-agy" \
+    "${DIR}/ax-harness"
+)"
+check_eq "session-migrate" "${migrated}" \
+  "{\"home\":\"${TMP}/migratehome\",\"has_gitconfig\":false,\"link_target\":\"${TMP}/.ax/sessions/sess-migrate\",\"args\":[\"--add-dir=${TMP}\",\"--dangerously-skip-permissions\",\"--print=Reply with MOCK_OK.\"]}"
+test "$(cat "${TMP}/.ax/sessions/sess-migrate/marker.txt")" = "keep"
 
 # 16. Explicit continue:false or conversation in spec.config is not overridden.
 check_eq "session-explicit-no-continue" \
@@ -329,9 +361,11 @@ for bad in "../escape" "a/b" ".."; do
   test "${rc}" -eq 2
 done
 
-# 18. Same path in AX_OUTPUT_FILE and spec.config.outputFile writes atomically
-#     without duplicate-temp errors or leftover .tmp files.
+# 18. Same path in AX_OUTPUT_FILE and spec.config.outputFile writes atomically,
+#     cleans up stale .tmp.* files from interrupted runs, and leaves no .tmp files.
 rm -rf "${TMP}/ws"
+mkdir -p "${TMP}/ws/.ax"
+printf 'stale' >"${TMP}/ws/.ax/output.tmp.99999"
 run_case '{"outputFile":"ws/.ax/output"}' AX_OUTPUT_FILE="ws/.ax/output" >/dev/null
 check_eq "ax-output dedup" "$(cat "${TMP}/ws/.ax/output")" "${DEFAULT_ARGS}"
 test -z "$(find "${TMP}/ws/.ax" -name '*.tmp.*')"
