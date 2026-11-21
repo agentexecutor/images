@@ -38,8 +38,9 @@ run() { docker run --rm --entrypoint sh "${img}" -c "$1"; }
 want="${AGY_VERSION:-${pinned}}"
 
 # No AX runner in the image; AX mounts it at /opt/ax.
-if run 'test -e /usr/local/bin/ax-task-runner || test -e /opt/ax/ax-task-runner'; then
-  fail "image must not contain ax-task-runner"
+# Check both names: AX renamed ax-task-runner to ax-runner (google/ax#677).
+if run 'for b in ax-runner ax-task-runner; do test -e /usr/local/bin/$b || test -e /opt/ax/$b && exit 0; done; exit 1'; then
+  fail "image must not contain ax-runner or ax-task-runner"
 fi
 run 'test -x /usr/local/bin/ax-harness' || fail "missing /usr/local/bin/ax-harness"
 run 'test -x /usr/local/share/ax/install-agy.sh' || fail "missing install-agy.sh"
