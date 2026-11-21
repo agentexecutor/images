@@ -3,14 +3,14 @@
 Pure mount-ready container image and launcher (`ax-harness`) for running
 headless [Antigravity CLI (`agy`)](https://antigravity.google/docs/cli/install)
 tasks under the AX in-container wrapper contract. Contains no AX runner binary
-(`ax-task-runner` is mounted read-only by AX at `/opt/ax`).
+(`ax-runner` is mounted read-only by AX at `/opt/ax`).
 
 ## Requirement: AX Runner Volume
 
-This image has no `ax-task-runner`, so it only starts as an AX task when
+This image has no `ax-runner`, so it only starts as an AX task when
 ax-server mounts a runner volume image: `ax install --runner-volume-image=...`
 or `AX_RUNNER_VOLUME_IMAGE` on ax-server. Release manifests may leave it empty
-(google/ax#625). Without it, AX runs `/usr/local/bin/ax-task-runner`, which
+(google/ax#625). Without it, AX runs `/usr/local/bin/ax-runner`, which
 this image doesn't have, and the task fails to start.
 
 ## Example Task (published image)
