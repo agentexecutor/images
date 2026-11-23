@@ -43,14 +43,13 @@ spec:
       value: "<your-api-key>"
   config:
     agent: antigravity-preview-09-2026
+    agentConfig:
+      model: gemini-3.8-flash
     inputs:
       - "Create hello.py that prints hello."
       - "Then run it."
     previousInteractionId: "<interaction-id>" # optional: continue an earlier interaction
     systemInstruction: "Run the tests before you finish."
-    agentConfig:
-      type: antigravity
-      model: gemini-3.8-flash
     timeout: 30m
 ```
 
@@ -70,11 +69,11 @@ answer is printed and written to `<workspace>/.ax/output`.
 | Key | Type | Default | Description |
 | --- | --- | --- | --- |
 | `agent` | string | `antigravity-preview-09-2026` | Managed agent to run. |
+| `agentConfig` | object | `{type: antigravity}` | Agent settings, e.g. `{model: gemini-3.8-flash}`. `type` is always `antigravity`. |
 | `inputs` | list of strings | `spec.goal.text` | Text parts of the interaction's input. |
 | `previousInteractionId` | string | | Earlier interaction to continue from. |
 | `systemInstruction` | string | | System instruction for the agent. |
 | `tools` | list | | Extra tools, such as `google_search` or remote MCP servers. |
-| `agentConfig` | object | | Agent settings, e.g. `{type: antigravity, model: gemini-3.8-flash}`. |
 | `labels` | map of strings | | Labels for the interaction. |
 | `responseFormat` | object | | JSON schema the answer must follow. |
 | `safetySettings` | list | | Safety settings. |

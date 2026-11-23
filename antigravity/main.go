@@ -263,6 +263,21 @@ func loadConfig(path string) (config, error) {
 			return cfg, errors.New("spec.config.agent must be a managed agent name")
 		}
 	}
+	// The agent config is always the Antigravity agent's.
+	agentConfig := map[string]json.RawMessage{}
+	if v, ok := cfg.Request["agent_config"]; ok {
+		if err := json.Unmarshal(v, &agentConfig); err != nil || agentConfig == nil {
+			return cfg, errors.New("spec.config.agentConfig must be an object")
+		}
+		if t, ok := agentConfig["type"]; ok && string(t) != `"antigravity"` {
+			return cfg, fmt.Errorf("spec.config.agentConfig.type must be antigravity, got %s", t)
+		}
+	}
+	agentConfig["type"] = json.RawMessage(`"antigravity"`)
+	if cfg.Request == nil {
+		cfg.Request = map[string]json.RawMessage{}
+	}
+	cfg.Request["agent_config"], _ = json.Marshal(agentConfig)
 	// Check the fields against the SDK's request type now, rather than
 	// after creating an environment.
 	req := map[string]any{"input": cfg.input("x")}

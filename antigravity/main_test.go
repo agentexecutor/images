@@ -285,6 +285,7 @@ func TestDefaults(t *testing.T) {
 	want := map[string]any{
 		"agent": "antigravity-preview-09-2026", "input": "Create hello.py.", "environment": "env1",
 		"background": true, "store": true, "stream": false,
+		"agent_config": map[string]any{"type": "antigravity"},
 	}
 	if got := interactionPosts(log)[0]; !reflect.DeepEqual(got, want) {
 		t.Errorf("interaction request\n got  %v\n want %v", got, want)
@@ -332,7 +333,7 @@ func contains(s []string, v string) bool {
 func TestRequestFields(t *testing.T) {
 	e := newEnv(t)
 	cfg := `{"agent":"antigravity-preview-05-2026","systemInstruction":"Be terse.",
-	  "tools":[{"type":"google_search"}],"agentConfig":{"type":"antigravity","model":"gemini-x"},
+	  "tools":[{"type":"google_search"}],"agentConfig":{"model":"gemini-x"},
 	  "previousInteractionId":"prev-1","labels":{"team":"ax"},
 	  "commandTimeout":"5m","disableBash":true,"outputFile":"out/answer.txt"}`
 	if code, _, stderr := e.run("Do it.", cfg); code != 0 {
@@ -485,10 +486,18 @@ func TestReattach(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	cfgFile := filepath.Join(t.TempDir(), "config.json")
+	if err := os.WriteFile(cfgFile, []byte("{}"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := loadConfig(cfgFile)
+	if err != nil {
+		t.Fatal(err)
+	}
 	st := &state{
 		path:        filepath.Join(e.ws, ".ax", stateFile),
 		Environment: envr,
-		Pending:     &pending{ID: id, Digest: digestOf("resume me", config{})},
+		Pending:     &pending{ID: id, Digest: digestOf("resume me", cfg)},
 	}
 	if err := st.save(); err != nil {
 		t.Fatal(err)
@@ -562,6 +571,9 @@ func TestBadInputs(t *testing.T) {
 		`{"environment":"env9"}`,
 		`{"stream":true}`,
 		`{"agentConfig":{"type":"nope"}}`,
+		`{"agentConfig":{"type":"dynamic"}}`,
+		`{"agentConfig":"antigravity"}`,
+		`{"agentConfig":null}`,
 		`{"commandTimeout":"5 minutes"}`,
 		`{"agent":3}`,
 		`{"disableBash":"yes"}`,
