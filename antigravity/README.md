@@ -54,10 +54,8 @@ spec:
     timeout: 30m
 ```
 
-AX only starts an image's launcher (`/usr/local/bin/ax-harness`, a link to
-`ax-antigravity`) for tasks with `spec.goal`, so a task without one runs
-`ax-antigravity` as its command. A task can set `spec.goal.text`
-instead of `commands` and `inputs`: the goal is then the input.
+Instead of `commands` and `inputs`, a task can set `spec.goal.text`, which is
+then the input.
 
 Add egress rules for anything the agent's commands need, such as `github.com`
 or package registries.
@@ -70,7 +68,7 @@ or package registries.
 as-is. `agent` defaults to `antigravity-preview-09-2026`. `inputs` is a list of
 strings, sent as the text parts of the interaction's input; without it, the
 input is `spec.goal.text`. The answer is printed and written to
-`AX_OUTPUT_FILE` (`<workspace>/.ax/output`). The harness sets `environment`, `background`, `stream`,
+`<workspace>/.ax/output`. The harness sets `environment`, `background`, `stream`,
 `store` and `continuation_token` itself.
 
 Harness options:
