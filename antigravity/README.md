@@ -101,6 +101,7 @@ finished does nothing. The state it needs is in `<workspace>/.ax`.
 
 - `GEMINI_API_KEY` is removed from the tool worker's environment, so the agent's commands don't inherit it. They run as the same user as the harness, though, so treat the key as readable from the sandbox.
 - The environment key is stored in `<workspace>/.ax` (mode `0600`) so a relaunched harness can reconnect.
+- The Gateway can't inject `GEMINI_API_KEY` yet. Injecting it needs an `https` rule with `replaceHeaders`, but the tool worker connects to the same host over a WebSocket, and the egress gateway rejects WebSocket upgrades on `https` rules. Use `tlsPassthrough` and pass the key in `spec.env` until it supports them.
 
 ## Build and Test
 
