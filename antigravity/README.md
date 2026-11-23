@@ -73,7 +73,7 @@ answer is printed and written to `<workspace>/.ax/output`.
 | `inputs` | list of strings | `spec.goal.text` | Text parts of the interaction's input. |
 | `previousInteractionId` | string | | Earlier interaction to continue from. |
 | `systemInstruction` | string | | System instruction for the agent. |
-| `tools` | list | | Extra tools, such as `google_search` or remote MCP servers. |
+| `tools` | list | | Extra tools, such as `google_search` or remote MCP servers. The Workspace's MCP servers are added to them. |
 | `labels` | map of strings | | Labels for the interaction. |
 | `responseFormat` | object | | JSON schema the answer must follow. |
 | `safetySettings` | list | | Safety settings. |
@@ -87,6 +87,15 @@ answer is printed and written to `<workspace>/.ax/output`.
 Durations are Go durations such as `90s` or `15m`. Other keys are rejected,
 including fields the API deprecated and `environment`, `background`, `stream`,
 `store` and `continuationToken`, which the harness sets itself.
+
+## MCP servers
+
+The Workspace's MCP servers are added to the interaction's `tools`
+automatically. The Gemini API calls them, not the sandbox, so:
+
+- only servers with an `endpoint` are added; servers with a `command` are skipped;
+- the endpoint must be reachable from the Gemini API, not just from the task;
+- a server with the same name in `spec.config.tools` keeps its definition there, for example to add `headers` or `allowed_tools`.
 
 ## Restarts
 

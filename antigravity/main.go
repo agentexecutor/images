@@ -28,8 +28,9 @@
 //	                    interaction's input unless spec.config.input is set
 //	AX_CONFIG_FILE      optional path to spec.config as JSON: interaction
 //	                    request fields and harness options (see config)
-//	AX_MCP_CONFIG_FILE  ignored; Managed Agents call MCP servers from the
-//	                    Gemini API, not from the sandbox
+//	AX_MCP_CONFIG_FILE  optional path to the Workspace's MCP servers; HTTP
+//	                    servers are added to the interaction's tools, which
+//	                    the Gemini API calls (stdio servers are skipped)
 //	AX_SESSION_FILE     optional path to spec.sessionId; when non-empty, the
 //	                    environment is kept in <workspace>/.ax/sessions/<id>
 //	                    and follow-up turns continue the previous interaction
@@ -427,7 +428,9 @@ func (h *harness) run(ctx context.Context) (int, error) {
 	if err != nil {
 		return 1, err
 	}
-	h.warnMCP()
+	if err := h.applyMCP(&cfg); err != nil {
+		return 1, err
+	}
 	digest := digestOf(goal, cfg)
 	if st.Done == digest && st.Pending == nil {
 		h.logf("already finished for this input; not running it again")
@@ -545,17 +548,66 @@ func (h *harness) stopped(ctx context.Context, code int, err error) (int, error)
 	return code, err
 }
 
-func (h *harness) warnMCP() {
-	raw, err := readFile(h.getenv("AX_MCP_CONFIG_FILE"))
+// applyMCP adds the Workspace's HTTP MCP servers to the interaction's
+// tools. The Gemini API calls them, so they must be reachable from it; stdio
+// servers can't be, and are skipped. A server named in spec.config.tools
+// keeps that definition.
+func (h *harness) applyMCP(cfg *config) error {
+	path := h.getenv("AX_MCP_CONFIG_FILE")
+	raw, err := readFile(path)
 	if err != nil || strings.TrimSpace(raw) == "" {
-		return
+		return err
 	}
 	var mcp struct {
-		MCPServers map[string]any `json:"mcpServers"`
+		MCPServers map[string]struct {
+			Type string `json:"type"`
+			URL  string `json:"url"`
+		} `json:"mcpServers"`
 	}
-	if json.Unmarshal([]byte(raw), &mcp) == nil && len(mcp.MCPServers) > 0 {
-		h.logf("ignoring Workspace MCP servers; Managed Agents do not reach MCP servers through the sandbox")
+	if err := json.Unmarshal([]byte(raw), &mcp); err != nil {
+		return fmt.Errorf("%s: %w", path, err)
 	}
+	if len(mcp.MCPServers) == 0 {
+		return nil
+	}
+	var tools []map[string]any
+	if v, ok := cfg.Request["tools"]; ok {
+		if err := json.Unmarshal(v, &tools); err != nil {
+			return fmt.Errorf("spec.config.tools: %w", err)
+		}
+	}
+	configured := map[string]bool{}
+	for _, t := range tools {
+		if name, ok := t["name"].(string); ok && t["type"] == "mcp_server" {
+			configured[name] = true
+		}
+	}
+	added := false
+	// Sorted, so that a relaunch builds the same request and reattaches.
+	for _, name := range slices.Sorted(maps.Keys(mcp.MCPServers)) {
+		srv := mcp.MCPServers[name]
+		switch {
+		case configured[name]:
+			h.logf("using spec.config.tools for MCP server %s", name)
+		case srv.URL == "":
+			h.logf("skipping MCP server %s: the Gemini API can only call MCP servers over HTTP", name)
+		default:
+			tools = append(tools, map[string]any{"type": "mcp_server", "name": name, "url": srv.URL})
+			added = true
+		}
+	}
+	if !added {
+		return nil
+	}
+	b, err := json.Marshal(tools)
+	if err != nil {
+		return err
+	}
+	if cfg.Request == nil {
+		cfg.Request = map[string]json.RawMessage{}
+	}
+	cfg.Request["tools"] = b
+	return nil
 }
 
 // finish keeps a session's environment for its next turn, and deletes a

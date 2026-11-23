@@ -390,6 +390,36 @@ func TestGoalAndInputs(t *testing.T) {
 	}
 }
 
+func TestMCP(t *testing.T) {
+	e := newEnv(t)
+	mcpFile := filepath.Join(e.runDir, "mcp.json")
+	os.WriteFile(mcpFile, []byte(`{"mcpServers":{
+	  "docs":{"type":"http","url":"https://docs.example.com/mcp"},
+	  "pinned":{"type":"http","url":"https://other.example.com/mcp"},
+	  "local":{"type":"stdio","command":"git-mcp","args":["serve"]}}}`), 0o644)
+	cfg := `{"tools":[{"type":"google_search"},{"type":"mcp_server","name":"pinned","url":"https://pinned.example.com/mcp"}]}`
+	code, _, stderr := e.run("Do it.", cfg, "AX_MCP_CONFIG_FILE="+mcpFile)
+	if code != 0 {
+		t.Fatalf("code=%d stderr=%s", code, stderr)
+	}
+	want := []any{
+		map[string]any{"type": "google_search"},
+		map[string]any{"type": "mcp_server", "name": "pinned", "url": "https://pinned.example.com/mcp"},
+		map[string]any{"type": "mcp_server", "name": "docs", "url": "https://docs.example.com/mcp"},
+	}
+	if got := interactionPosts(e.api.entries())[0]["tools"]; !reflect.DeepEqual(got, want) {
+		t.Errorf("tools\n got  %v\n want %v", got, want)
+	}
+	if !strings.Contains(stderr, "skipping MCP server local") {
+		t.Errorf("stdio server not reported as skipped: %s", stderr)
+	}
+
+	os.WriteFile(mcpFile, []byte(`{"mcpServers":`), 0o644)
+	if code, _, _ := e.run("Do it.", "{}", "AX_MCP_CONFIG_FILE="+mcpFile); code != 1 {
+		t.Errorf("malformed MCP config: code=%d, want 1", code)
+	}
+}
+
 func TestSession(t *testing.T) {
 	e := newEnv(t)
 	session := filepath.Join(e.runDir, "session-id")
