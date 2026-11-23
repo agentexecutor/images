@@ -114,13 +114,17 @@ var reservedFields = []string{"environment", "background", "stream", "store", "c
 // another key.
 var replacedFields = map[string]string{"input": "inputs"}
 
+// deprecatedFields are interaction request fields the Gemini API deprecated.
+var deprecatedFields = []string{"response_mime_type", "response_modalities"}
+
 // requestFields are the CreateInteraction fields spec.config may set.
 var requestFields = func() []string {
 	var names []string
 	t := reflect.TypeFor[gi.CreateAgentInteraction]()
 	for i := range t.NumField() {
 		name, _, _ := strings.Cut(t.Field(i).Tag.Get("json"), ",")
-		if name != "" && name != "-" && !slices.Contains(reservedFields, name) && replacedFields[name] == "" {
+		if name != "" && name != "-" && !slices.Contains(reservedFields, name) &&
+			replacedFields[name] == "" && !slices.Contains(deprecatedFields, name) {
 			names = append(names, name)
 		}
 	}
@@ -208,6 +212,8 @@ func loadConfig(path string) (config, error) {
 			cfg.Request[k] = v
 		case slices.Contains(reservedFields, k):
 			return cfg, fmt.Errorf("spec.config.%s is set by ax-antigravity", k)
+		case slices.Contains(deprecatedFields, k):
+			return cfg, fmt.Errorf("spec.config.%s is deprecated by the Gemini API", k)
 		case replacedFields[k] != "":
 			return cfg, fmt.Errorf("use spec.config.%s instead of %s", replacedFields[k], k)
 		default:

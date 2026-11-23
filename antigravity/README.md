@@ -79,16 +79,14 @@ answer is printed and written to `<workspace>/.ax/output`.
 | `safety_settings` | list | | Safety settings. |
 | `service_tier` | string | | Service tier. |
 | `webhook_config` | object | | Webhooks for interaction events. |
-| `response_mime_type` | string | | Deprecated by the API; use `response_format`. |
-| `response_modalities` | list | | Deprecated by the API. |
 | `timeout` | duration | none | How long to wait for the interaction, measured from each launch. |
 | `commandTimeout` | duration | `2m` | Limit for each `execute_bash` command. |
 | `disableBash` | bool | `false` | Leave the agent only the file tools. |
 | `outputFile` | string | | Extra path to write the answer to. |
 
 Durations are Go durations such as `90s` or `15m`. Other keys are rejected,
-including `environment`, `background`, `stream`, `store` and
-`continuation_token`, which the harness sets itself.
+including fields the API deprecated and `environment`, `background`, `stream`,
+`store` and `continuation_token`, which the harness sets itself.
 
 ## Restarts
 

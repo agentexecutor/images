@@ -543,6 +543,8 @@ func TestBadInputs(t *testing.T) {
 		`{"model":"x"}`,
 		`{"base_agent":"a"}`,
 		`{"input":"x"}`,
+		`{"response_mime_type":"application/json"}`,
+		`{"response_modalities":["TEXT"]}`,
 		`{"inputs":"x"}`,
 		`{"inputs":["ok",""]}`,
 		`{"inputs":[1]}`,
