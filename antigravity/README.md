@@ -46,9 +46,9 @@ spec:
     inputs:
       - "Create hello.py that prints hello."
       - "Then run it."
-    previous_interaction_id: "<interaction-id>" # optional: continue an earlier interaction
-    system_instruction: "Run the tests before you finish."
-    agent_config:
+    previousInteractionId: "<interaction-id>" # optional: continue an earlier interaction
+    systemInstruction: "Run the tests before you finish."
+    agentConfig:
       type: antigravity
       model: gemini-3.8-flash
     timeout: 30m
@@ -62,23 +62,24 @@ or package registries.
 
 ## Config
 
-Interaction fields in `spec.config` are sent as-is on the
-[CreateInteraction](https://ai.google.dev/api/interactions) request. The
+Interaction fields in `spec.config` are the camelCase names of the
+[CreateInteraction](https://ai.google.dev/api/interactions) request fields
+(`systemInstruction` for `system_instruction`); their values are sent as-is. The
 answer is printed and written to `<workspace>/.ax/output`.
 
 | Key | Type | Default | Description |
 | --- | --- | --- | --- |
 | `agent` | string | `antigravity-preview-09-2026` | Managed agent to run. |
 | `inputs` | list of strings | `spec.goal.text` | Text parts of the interaction's input. |
-| `previous_interaction_id` | string | | Earlier interaction to continue from. |
-| `system_instruction` | string | | System instruction for the agent. |
+| `previousInteractionId` | string | | Earlier interaction to continue from. |
+| `systemInstruction` | string | | System instruction for the agent. |
 | `tools` | list | | Extra tools, such as `google_search` or remote MCP servers. |
-| `agent_config` | object | | Agent settings, e.g. `{type: antigravity, model: gemini-3.8-flash}`. |
+| `agentConfig` | object | | Agent settings, e.g. `{type: antigravity, model: gemini-3.8-flash}`. |
 | `labels` | map of strings | | Labels for the interaction. |
-| `response_format` | object | | JSON schema the answer must follow. |
-| `safety_settings` | list | | Safety settings. |
-| `service_tier` | string | | Service tier. |
-| `webhook_config` | object | | Webhooks for interaction events. |
+| `responseFormat` | object | | JSON schema the answer must follow. |
+| `safetySettings` | list | | Safety settings. |
+| `serviceTier` | string | | Service tier. |
+| `webhookConfig` | object | | Webhooks for interaction events. |
 | `timeout` | duration | none | How long to wait for the interaction, measured from each launch. |
 | `commandTimeout` | duration | `2m` | Limit for each `execute_bash` command. |
 | `disableBash` | bool | `false` | Leave the agent only the file tools. |
@@ -86,7 +87,7 @@ answer is printed and written to `<workspace>/.ax/output`.
 
 Durations are Go durations such as `90s` or `15m`. Other keys are rejected,
 including fields the API deprecated and `environment`, `background`, `stream`,
-`store` and `continuation_token`, which the harness sets itself.
+`store` and `continuationToken`, which the harness sets itself.
 
 ## Restarts
 

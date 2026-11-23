@@ -331,9 +331,9 @@ func contains(s []string, v string) bool {
 
 func TestRequestFields(t *testing.T) {
 	e := newEnv(t)
-	cfg := `{"agent":"antigravity-preview-05-2026","system_instruction":"Be terse.",
-	  "tools":[{"type":"google_search"}],"agent_config":{"type":"antigravity","model":"gemini-x"},
-	  "previous_interaction_id":"prev-1","labels":{"team":"ax"},
+	cfg := `{"agent":"antigravity-preview-05-2026","systemInstruction":"Be terse.",
+	  "tools":[{"type":"google_search"}],"agentConfig":{"type":"antigravity","model":"gemini-x"},
+	  "previousInteractionId":"prev-1","labels":{"team":"ax"},
 	  "commandTimeout":"5m","disableBash":true,"outputFile":"out/answer.txt"}`
 	if code, _, stderr := e.run("Do it.", cfg); code != 0 {
 		t.Fatalf("code=%d stderr=%s", code, stderr)
@@ -551,15 +551,17 @@ func TestBadInputs(t *testing.T) {
 		`{"model":"x"}`,
 		`{"base_agent":"a"}`,
 		`{"input":"x"}`,
-		`{"response_mime_type":"application/json"}`,
+		`{"responseMimeType":"application/json"}`,
 		`{"response_modalities":["TEXT"]}`,
+		`{"system_instruction":"x"}`,
+		`{"continuationToken":"t"}`,
 		`{"inputs":"x"}`,
 		`{"inputs":["ok",""]}`,
 		`{"inputs":[1]}`,
 		`{"agent":""}`,
 		`{"environment":"env9"}`,
 		`{"stream":true}`,
-		`{"agent_config":{"type":"nope"}}`,
+		`{"agentConfig":{"type":"nope"}}`,
 		`{"commandTimeout":"5 minutes"}`,
 		`{"agent":3}`,
 		`{"disableBash":"yes"}`,

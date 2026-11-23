@@ -60,6 +60,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -117,20 +118,39 @@ var replacedFields = map[string]string{"input": "inputs"}
 // deprecatedFields are interaction request fields the Gemini API deprecated.
 var deprecatedFields = []string{"response_mime_type", "response_modalities"}
 
-// requestFields are the CreateInteraction fields spec.config may set.
-var requestFields = func() []string {
-	var names []string
+// requestFields maps the camelCase spec.config keys to the CreateInteraction
+// fields they set.
+var requestFields = func() map[string]string {
+	fields := map[string]string{}
 	t := reflect.TypeFor[gi.CreateAgentInteraction]()
 	for i := range t.NumField() {
 		name, _, _ := strings.Cut(t.Field(i).Tag.Get("json"), ",")
 		if name != "" && name != "-" && !slices.Contains(reservedFields, name) &&
 			replacedFields[name] == "" && !slices.Contains(deprecatedFields, name) {
-			names = append(names, name)
+			fields[camelCase(name)] = name
 		}
 	}
-	slices.Sort(names)
-	return names
+	return fields
 }()
+
+// camelCase converts a snake_case name to camelCase.
+func camelCase(name string) string {
+	parts := strings.Split(name, "_")
+	for i := 1; i < len(parts); i++ {
+		if parts[i] != "" {
+			parts[i] = strings.ToUpper(parts[i][:1]) + parts[i][1:]
+		}
+	}
+	return strings.Join(parts, "")
+}
+
+// configKeys returns the supported spec.config keys, sorted.
+func configKeys() []string {
+	keys := slices.Collect(maps.Keys(requestFields))
+	keys = append(keys, harnessKeys...)
+	slices.Sort(keys)
+	return keys
+}
 
 var sessionIDRE = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
 
@@ -205,20 +225,21 @@ func loadConfig(path string) (config, error) {
 		switch {
 		case slices.Contains(harnessKeys, k):
 			harness[k] = v
-		case slices.Contains(requestFields, k):
+		case requestFields[k] != "":
 			if cfg.Request == nil {
 				cfg.Request = map[string]json.RawMessage{}
 			}
-			cfg.Request[k] = v
-		case slices.Contains(reservedFields, k):
+			cfg.Request[requestFields[k]] = v
+		case requestFields[camelCase(k)] != "":
+			return cfg, fmt.Errorf("use spec.config.%s instead of %s", camelCase(k), k)
+		case slices.Contains(reservedFields, k) || slices.ContainsFunc(reservedFields, func(f string) bool { return camelCase(f) == k }):
 			return cfg, fmt.Errorf("spec.config.%s is set by ax-antigravity", k)
-		case slices.Contains(deprecatedFields, k):
+		case slices.Contains(deprecatedFields, k) || slices.ContainsFunc(deprecatedFields, func(f string) bool { return camelCase(f) == k }):
 			return cfg, fmt.Errorf("spec.config.%s is deprecated by the Gemini API", k)
 		case replacedFields[k] != "":
 			return cfg, fmt.Errorf("use spec.config.%s instead of %s", replacedFields[k], k)
 		default:
-			return cfg, fmt.Errorf("unknown spec.config key %q (supported: %s, %s)", k,
-				strings.Join(requestFields, ", "), strings.Join(harnessKeys, ", "))
+			return cfg, fmt.Errorf("unknown spec.config key %q (supported: %s)", k, strings.Join(configKeys(), ", "))
 		}
 	}
 	b, _ := json.Marshal(harness)
