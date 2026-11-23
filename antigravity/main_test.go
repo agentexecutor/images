@@ -376,8 +376,16 @@ func TestInputs(t *testing.T) {
 	if got := interactionPosts(e.api.entries())[0]["input"]; !reflect.DeepEqual(got, want) {
 		t.Errorf("input=%v", got)
 	}
-	if code, _, stderr := e.run("the goal", cfg); code != 0 || !strings.Contains(stderr, "ignoring spec.goal.text") {
-		t.Fatalf("code=%d stderr=%s", code, stderr)
+}
+
+func TestGoalAndInputs(t *testing.T) {
+	e := newEnv(t)
+	code, _, stderr := e.run("the goal", `{"inputs":["Read README.md."]}`)
+	if code != 2 || !strings.Contains(stderr, "set only one") {
+		t.Fatalf("code=%d stderr=%s, want 2", code, stderr)
+	}
+	if n := len(e.api.entries()); n != 0 {
+		t.Errorf("made %d API calls", n)
 	}
 }
 

@@ -353,7 +353,7 @@ func (h *harness) run(ctx context.Context) (int, error) {
 	}
 	switch hasInputs := len(cfg.Inputs) > 0; {
 	case hasInputs && strings.TrimSpace(goal) != "":
-		h.logf("spec.config.inputs is set; ignoring spec.goal.text")
+		return 2, errors.New("both spec.goal.text and spec.config.inputs are set; set only one")
 	case !hasInputs && strings.TrimSpace(goal) == "":
 		return 2, fmt.Errorf("empty goal in %s; set spec.goal.text or spec.config.inputs", goalFile)
 	}

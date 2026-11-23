@@ -55,7 +55,7 @@ spec:
 ```
 
 Instead of `commands` and `inputs`, a task can set `spec.goal.text`, which is
-then the input.
+then the input. Setting both `spec.goal.text` and `inputs` is an error.
 
 Add egress rules for anything the agent's commands need, such as `github.com`
 or package registries.
