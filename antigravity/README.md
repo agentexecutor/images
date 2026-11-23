@@ -62,21 +62,33 @@ or package registries.
 
 ## Config
 
-`spec.config` is an interaction request: `agent`, `previous_interaction_id`,
-`system_instruction`, `tools`, `agent_config` and the other
-[CreateInteraction](https://ai.google.dev/api/interactions) fields are sent
-as-is. `agent` defaults to `antigravity-preview-09-2026`. `inputs` is a list of
-strings, sent as the text parts of the interaction's input; without it, the
-input is `spec.goal.text`. The answer is printed and written to
-`<workspace>/.ax/output`. The harness sets `environment`, `background`, `stream`,
-`store` and `continuation_token` itself.
+Interaction fields in `spec.config` are sent as-is on the
+[CreateInteraction](https://ai.google.dev/api/interactions) request. The
+answer is printed and written to `<workspace>/.ax/output`.
 
-Harness options:
+| Key | Type | Default | Description |
+| --- | --- | --- | --- |
+| `agent` | string | `antigravity-preview-09-2026` | Managed agent to run. |
+| `inputs` | list of strings | `spec.goal.text` | Text parts of the interaction's input. |
+| `previous_interaction_id` | string | | Earlier interaction to continue from. |
+| `system_instruction` | string | | System instruction for the agent. |
+| `tools` | list | | Extra tools, such as `google_search` or remote MCP servers. |
+| `agent_config` | object | | Agent settings, e.g. `{type: antigravity, model: gemini-3.8-flash}`. |
+| `labels` | map of strings | | Labels for the interaction. |
+| `response_format` | object | | JSON schema the answer must follow. |
+| `safety_settings` | list | | Safety settings. |
+| `service_tier` | string | | Service tier. |
+| `webhook_config` | object | | Webhooks for interaction events. |
+| `response_mime_type` | string | | Deprecated by the API; use `response_format`. |
+| `response_modalities` | list | | Deprecated by the API. |
+| `timeout` | duration | none | How long to wait for the interaction, measured from each launch. |
+| `commandTimeout` | duration | `2m` | Limit for each `execute_bash` command. |
+| `disableBash` | bool | `false` | Leave the agent only the file tools. |
+| `outputFile` | string | | Extra path to write the answer to. |
 
-- `timeout`: how long to wait for the interaction (Go duration), measured from each launch.
-- `commandTimeout`: limit for each `execute_bash` command.
-- `disableBash`: `true` leaves the agent only the file tools.
-- `outputFile`: an extra path to write the answer to.
+Durations are Go durations such as `90s` or `15m`. Other keys are rejected,
+including `environment`, `background`, `stream`, `store` and
+`continuation_token`, which the harness sets itself.
 
 ## Restarts
 
