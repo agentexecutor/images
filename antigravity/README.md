@@ -99,7 +99,15 @@ automatically. The Gemini API calls them, not the sandbox, so:
 
 ## Restarts
 
-Each task gets a new environment, which is deleted when the task ends.
+When `AX_SESSION_FILE` is empty, each task gets a new environment that is
+deleted when the task ends. When `AX_SESSION_FILE` carries a session ID, the
+environment is kept under `<workspace>/.ax/sessions/<id>` so follow-up turns
+reuse it.
+
+Note: `ax-server` in `google/ax` currently defaults `spec.sessionId` to
+`metadata.uid` when omitted, so every server-created task passes a non-empty
+`AX_SESSION_FILE` and retains its remote environment until that contract is
+updated.
 
 When AX suspends a task, the harness leaves the interaction running and exits.
 On resume, AX relaunches it with the same config, and it reattaches to the
