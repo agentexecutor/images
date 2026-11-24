@@ -82,6 +82,14 @@ const (
 	stateFile    = "managed-agent.json"
 
 	maxContinuations = 20
+
+	// createTimeout bounds an in-flight CreateInteraction request across
+	// SIGTERM cancellation, matching the HTTP client timeout in api.go. Note
+	// that ax-runner allows 10s between SIGTERM and SIGKILL.
+	createTimeout = time.Minute
+	// cleanupTimeout bounds best-effort remote cancel and delete calls when a
+	// task finishes or fails terminally.
+	cleanupTimeout = 15 * time.Second
 )
 
 // config is spec.config: the fields of a Gemini API CreateInteraction request
@@ -157,6 +165,13 @@ var sessionIDRE = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
 
 // errStopped reports that the harness was signalled to stop.
 var errStopped = errors.New("stopped")
+
+// terminalError marks a turn failure where no pending interaction should be
+// retained for reattach, so the caller should run finish() cleanup.
+type terminalError struct{ err error }
+
+func (e terminalError) Error() string { return e.err.Error() }
+func (e terminalError) Unwrap() error { return e.err }
 
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
@@ -370,9 +385,14 @@ func writeAtomic(path string, data []byte, perm os.FileMode) error {
 	}
 	tmp := fmt.Sprintf("%s.tmp.%d", path, os.Getpid())
 	if err := os.WriteFile(tmp, data, perm); err != nil {
+		_ = os.Remove(tmp)
 		return err
 	}
-	return os.Rename(tmp, path)
+	if err := os.Rename(tmp, path); err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+	return nil
 }
 
 func (h *harness) run(ctx context.Context) (int, error) {
@@ -438,13 +458,15 @@ func (h *harness) run(ctx context.Context) (int, error) {
 	}
 
 	// Go's crypto/tls reads SSL_CERT_FILE, for this process and the worker.
-	caBundle := h.getenv("AX_CA_BUNDLE")
-	if caBundle == "" {
-		caBundle = defaultCA
-	}
+	// An explicit AX_CA_BUNDLE must exist and parse; the default path is used
+	// only when present.
 	sslCertFile := h.getenv("SSL_CERT_FILE")
-	if _, err := os.Stat(caBundle); err == nil && sslCertFile == "" {
-		sslCertFile = caBundle
+	if sslCertFile == "" {
+		if explicitCA := h.getenv("AX_CA_BUNDLE"); explicitCA != "" {
+			sslCertFile = explicitCA
+		} else if _, err := os.Stat(defaultCA); err == nil {
+			sslCertFile = defaultCA
+		}
 	}
 
 	baseURL := h.getenv("GOOGLE_GEMINI_BASE_URL")
@@ -476,8 +498,9 @@ func (h *harness) run(ctx context.Context) (int, error) {
 	for k, v := range cfg.Request {
 		request[k] = v
 	}
-	// Later turns of a session continue from the session's last interaction.
-	if sessionID != "" && st.LastInteractionID != "" {
+	// Later turns of a session continue from the session's last interaction
+	// unless spec.config.previousInteractionId was explicitly specified.
+	if _, explicit := request["previous_interaction_id"]; !explicit && sessionID != "" && st.LastInteractionID != "" {
 		request["previous_interaction_id"] = st.LastInteractionID
 	}
 	var deadline time.Time
@@ -488,6 +511,9 @@ func (h *harness) run(ctx context.Context) (int, error) {
 
 	w := newWorker(h, st.Environment, cfg, wd, baseURL, sslCertFile)
 	if err := w.start(); err != nil {
+		if st.Pending == nil {
+			h.finish(api, st, sessionID)
+		}
 		return 1, err
 	}
 	t := &turn{h: h, api: api, worker: w, state: st, digest: digest, deadline: deadline, pollInterval: pollInterval}
@@ -503,6 +529,11 @@ func (h *harness) run(ctx context.Context) (int, error) {
 		return 143, nil
 	}
 	if err != nil {
+		var term terminalError
+		if errors.As(err, &term) || st.Pending == nil {
+			st.Pending = nil
+			h.finish(api, st, sessionID)
+		}
 		return 1, err
 	}
 
@@ -619,8 +650,12 @@ func (h *harness) finish(api *client, st *state, sessionID string) {
 		}
 		return
 	}
-	if err := api.deleteEnvironment(context.Background(), st.Environment.ID); err != nil {
-		h.logf("failed to delete environment %s: %v", st.Environment.ID, err)
+	if st.Environment != nil {
+		dctx, cancel := context.WithTimeout(context.Background(), cleanupTimeout)
+		defer cancel()
+		if err := api.deleteEnvironment(dctx, st.Environment.ID); err != nil {
+			h.logf("failed to delete environment %s: %v", st.Environment.ID, err)
+		}
 	}
 	if st.Done == "" {
 		if err := st.remove(); err != nil {
@@ -673,10 +708,8 @@ func (t *turn) run(ctx context.Context, request map[string]any) (*interaction, e
 		}
 		switch it.Status {
 		case "requires_action":
-			if err := t.api.cancel(ctx, id); err != nil {
-				t.h.logf("%v", err)
-			}
-			return nil, errors.New("the agent called a client-side function tool, which ax-antigravity cannot answer")
+			t.cancelBestEffort(ctx, id)
+			return nil, terminalError{errors.New("the agent called a client-side function tool, which ax-antigravity cannot answer")}
 		case "requires_continuation":
 			follow := map[string]any{}
 			for k, v := range request {
@@ -694,7 +727,16 @@ func (t *turn) run(ctx context.Context, request map[string]any) (*interaction, e
 			return it, nil
 		}
 	}
-	return nil, fmt.Errorf("interaction did not finish after %d continuations", maxContinuations)
+	t.cancelBestEffort(ctx, id)
+	return nil, terminalError{fmt.Errorf("interaction did not finish after %d continuations", maxContinuations)}
+}
+
+func (t *turn) cancelBestEffort(ctx context.Context, id string) {
+	cctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), cleanupTimeout)
+	defer cancel()
+	if err := t.api.cancel(cctx, id); err != nil {
+		t.h.logf("%v", err)
+	}
 }
 
 func (t *turn) create(ctx context.Context, request map[string]any) (string, error) {
@@ -703,7 +745,7 @@ func (t *turn) create(ctx context.Context, request map[string]any) (string, erro
 	}
 	// A stop must not abort the call: the server may have created the
 	// interaction already, and its ID is needed to reattach on relaunch.
-	cctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Minute)
+	cctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), createTimeout)
 	defer cancel()
 	id, err := t.api.createInteraction(cctx, request)
 	if err != nil {
@@ -734,10 +776,12 @@ func (t *turn) wait(ctx context.Context, id string) (*interaction, error) {
 			return it, nil
 		}
 		if !t.deadline.IsZero() && time.Now().After(t.deadline) {
-			return nil, fmt.Errorf("interaction %s did not finish within spec.config.timeout", id)
+			t.cancelBestEffort(ctx, id)
+			return nil, terminalError{fmt.Errorf("interaction %s did not finish within spec.config.timeout", id)}
 		}
 		if err := t.worker.check(); err != nil {
-			return nil, err
+			t.cancelBestEffort(ctx, id)
+			return nil, terminalError{err}
 		}
 		select {
 		case <-ctx.Done():

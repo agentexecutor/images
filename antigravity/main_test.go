@@ -499,6 +499,21 @@ func TestWorkerCrash(t *testing.T) {
 	if n := len(e.workers()); n != maxWorkerRestarts+1 {
 		t.Errorf("worker started %d times, want %d", n, maxWorkerRestarts+1)
 	}
+	var cancelled, deleted bool
+	for _, l := range e.api.entries() {
+		if l.Method == "POST" && l.Path == "/v1beta/interactions/int1/cancel" {
+			cancelled = true
+		}
+		if l.Method == "DELETE" && l.Path == "/v1beta/environments/env1" {
+			deleted = true
+		}
+	}
+	if !cancelled || !deleted {
+		t.Errorf("expected worker crash to cancel interaction and delete env (cancelled=%v deleted=%v)", cancelled, deleted)
+	}
+	if _, err := os.Stat(filepath.Join(e.ws, ".ax", stateFile)); !os.IsNotExist(err) {
+		t.Errorf("state file should be removed after one-off crash cleanup, stat err=%v", err)
+	}
 }
 
 func TestReattach(t *testing.T) {
@@ -617,5 +632,120 @@ func TestBadInputs(t *testing.T) {
 	}
 	if n := len(e.api.entries()); n != 0 {
 		t.Errorf("bad inputs made %d API calls", n)
+	}
+}
+
+func TestSessionPreservesExplicitPreviousInteractionID(t *testing.T) {
+	e := newEnv(t)
+	session := filepath.Join(e.runDir, "session-id")
+	os.WriteFile(session, []byte("sess-explicit\n"), 0o644)
+	if code, _, stderr := e.run("turn one", "{}", "AX_SESSION_FILE="+session); code != 0 {
+		t.Fatalf("turn one: code=%d stderr=%s", code, stderr)
+	}
+	cfg := `{"previousInteractionId":"explicit-prev-99"}`
+	if code, _, stderr := e.run("turn two", cfg, "AX_SESSION_FILE="+session); code != 0 {
+		t.Fatalf("turn two: code=%d stderr=%s", code, stderr)
+	}
+	posts := interactionPosts(e.api.entries())
+	if got := posts[1]["previous_interaction_id"]; got != "explicit-prev-99" {
+		t.Fatalf("previous_interaction_id = %v, want explicit-prev-99", got)
+	}
+}
+
+func TestRequiresActionClearsPendingAndDeletesEnv(t *testing.T) {
+	t.Run("one_off", func(t *testing.T) {
+		e := newEnv(t)
+		code, _, stderr := e.run("status=requires_action", "{}")
+		if code != 1 || !strings.Contains(stderr, "client-side function tool") {
+			t.Fatalf("code=%d stderr=%s", code, stderr)
+		}
+		var cancelled, deleted bool
+		for _, l := range e.api.entries() {
+			if l.Method == "POST" && l.Path == "/v1beta/interactions/int1/cancel" {
+				cancelled = true
+			}
+			if l.Method == "DELETE" && l.Path == "/v1beta/environments/env1" {
+				deleted = true
+			}
+		}
+		if !cancelled || !deleted {
+			t.Fatalf("expected cancel and deleteEnvironment (cancelled=%v deleted=%v)", cancelled, deleted)
+		}
+		if _, err := os.Stat(filepath.Join(e.ws, ".ax", stateFile)); !os.IsNotExist(err) {
+			t.Fatalf("expected state file deleted after one-off requires_action, err=%v", err)
+		}
+	})
+
+	t.Run("session_clears_pending_for_next_launch", func(t *testing.T) {
+		e := newEnv(t)
+		session := filepath.Join(e.runDir, "session-id")
+		os.WriteFile(session, []byte("sess-ra\n"), 0o644)
+		if code, _, _ := e.run("status=requires_action", "{}", "AX_SESSION_FILE="+session); code != 1 {
+			t.Fatalf("code=%d, want 1", code)
+		}
+		sessDir := filepath.Join(e.ws, ".ax", "sessions", "sess-ra")
+		st, err := loadState(sessDir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if st.Pending != nil {
+			t.Fatalf("expected st.Pending to be cleared after requires_action cancel, got %+v", st.Pending)
+		}
+		if st.Environment == nil || st.Environment.ID != "env1" {
+			t.Fatalf("expected session environment to remain saved, got %+v", st.Environment)
+		}
+	})
+}
+
+func TestTimeoutCancelsAndCleansUp(t *testing.T) {
+	e := newEnv(t)
+	e.api.mu.Lock()
+	e.api.hold = true
+	e.api.mu.Unlock()
+	code, _, stderr := e.run("slow goal", `{"timeout":"30ms"}`)
+	if code != 1 || !strings.Contains(stderr, "spec.config.timeout") {
+		t.Fatalf("code=%d stderr=%s", code, stderr)
+	}
+	var cancelled, deleted bool
+	for _, l := range e.api.entries() {
+		if l.Method == "POST" && l.Path == "/v1beta/interactions/int1/cancel" {
+			cancelled = true
+		}
+		if l.Method == "DELETE" && l.Path == "/v1beta/environments/env1" {
+			deleted = true
+		}
+	}
+	if !cancelled || !deleted {
+		t.Fatalf("expected cancel and deleteEnvironment on timeout (cancelled=%v deleted=%v)", cancelled, deleted)
+	}
+	if _, err := os.Stat(filepath.Join(e.ws, ".ax", stateFile)); !os.IsNotExist(err) {
+		t.Fatalf("expected state file deleted after timeout, err=%v", err)
+	}
+}
+
+func TestWorkerStartFailureDeletesEnv(t *testing.T) {
+	e := newEnv(t)
+	code, _, stderr := e.run("hello", "{}", "GEMINI_API_BIN=/nonexistent/gemini-api-bin")
+	if code != 1 || !strings.Contains(stderr, "starting gemini-api") {
+		t.Fatalf("code=%d stderr=%s", code, stderr)
+	}
+	log := e.api.entries()
+	if len(log) == 0 || log[len(log)-1].Method != "DELETE" || log[len(log)-1].Path != "/v1beta/environments/env1" {
+		t.Fatalf("expected DELETE /v1beta/environments/env1 after worker start failure, got log %+v", log)
+	}
+}
+
+func TestCABundleErrors(t *testing.T) {
+	e := newEnv(t)
+	if code, _, stderr := e.run("hello", "{}", "AX_CA_BUNDLE=/nonexistent/ca-bundle.pem"); code != 1 || !strings.Contains(stderr, "reading CA bundle") {
+		t.Fatalf("missing CA bundle: code=%d stderr=%s", code, stderr)
+	}
+	badPEM := filepath.Join(t.TempDir(), "bad.pem")
+	os.WriteFile(badPEM, []byte("not a valid certificate"), 0o644)
+	if code, _, stderr := e.run("hello", "{}", "AX_CA_BUNDLE="+badPEM); code != 1 || !strings.Contains(stderr, "no valid PEM certificates") {
+		t.Fatalf("invalid PEM: code=%d stderr=%s", code, stderr)
+	}
+	if len(e.api.entries()) != 0 {
+		t.Fatalf("invalid CA bundle should fail before making API calls")
 	}
 }

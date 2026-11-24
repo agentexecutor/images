@@ -46,14 +46,18 @@ type client struct {
 func newClient(ctx context.Context, baseURL, apiKey, caFile string) (*client, error) {
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	if caFile != "" {
-		if pem, err := os.ReadFile(caFile); err == nil {
-			pool, err := x509.SystemCertPool()
-			if err != nil {
-				pool = x509.NewCertPool()
-			}
-			pool.AppendCertsFromPEM(pem)
-			transport.TLSClientConfig = &tls.Config{RootCAs: pool, MinVersion: tls.VersionTLS12}
+		pem, err := os.ReadFile(caFile)
+		if err != nil {
+			return nil, fmt.Errorf("reading CA bundle %s: %w", caFile, err)
 		}
+		pool, err := x509.SystemCertPool()
+		if err != nil {
+			pool = x509.NewCertPool()
+		}
+		if !pool.AppendCertsFromPEM(pem) {
+			return nil, fmt.Errorf("CA bundle %s contains no valid PEM certificates", caFile)
+		}
+		transport.TLSClientConfig = &tls.Config{RootCAs: pool, MinVersion: tls.VersionTLS12}
 	}
 	c, err := genai.NewClient(ctx, &genai.ClientConfig{
 		APIKey:     apiKey,

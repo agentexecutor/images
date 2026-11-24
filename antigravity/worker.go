@@ -25,6 +25,10 @@ import (
 
 const maxWorkerRestarts = 3
 
+// workerStopTimeout gives `gemini-api environments connect` room to exit on
+// SIGTERM while staying under ax-runner's 10s stop grace period before SIGKILL.
+const workerStopTimeout = 5 * time.Second
+
 // worker runs `gemini-api environments connect`, which leases the
 // environment's interactions and executes their tool calls in the workspace.
 // It holds only the environment key: API credentials are removed from its
@@ -108,7 +112,8 @@ func (w *worker) check() error {
 	return w.start()
 }
 
-// stop terminates the worker, killing it if it does not exit within 10s.
+// stop terminates the worker, killing it if it does not exit within
+// workerStopTimeout.
 func (w *worker) stop() {
 	if w.cmd == nil {
 		return
@@ -121,7 +126,7 @@ func (w *worker) stop() {
 	_ = w.cmd.Process.Signal(syscall.SIGTERM)
 	select {
 	case <-w.done:
-	case <-time.After(10 * time.Second):
+	case <-time.After(workerStopTimeout):
 		_ = w.cmd.Process.Kill()
 		<-w.done
 	}

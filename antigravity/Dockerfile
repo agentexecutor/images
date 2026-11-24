@@ -17,7 +17,7 @@
 # The agent loop runs in the Gemini API. The image has the gemini-api CLI,
 # whose `environments connect` runs the agent's tool calls in the task's
 # workspace, and /usr/local/bin/ax-antigravity, which creates a self-hosted
-# environment and the interaction for each task. /usr/local/bin/ax-harness,
+# environment and the interaction for each task. /usr/local/bin/ax-launcher,
 # the launcher AX starts for tasks with a goal, links to it.
 FROM golang:1.26-bookworm@sha256:dc40a13b61304647ed7e5d581d246b86413dfc29d63c6d018310feb93cd98fc0 AS build
 
@@ -54,4 +54,4 @@ LABEL io.agentexecutor.gemini-api.version="${GEMINI_API_CLI_VERSION}"
 ENV GEMINI_API_CLI_VERSION="${GEMINI_API_CLI_VERSION}"
 
 COPY --from=build /go/bin/gemini-api /go/bin/ax-antigravity /usr/local/bin/
-RUN ln -s ax-antigravity /usr/local/bin/ax-harness && gemini-api version
+RUN ln -s ax-antigravity /usr/local/bin/ax-launcher && gemini-api version
