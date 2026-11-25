@@ -19,7 +19,7 @@
 #   verify_image.sh <image> bundled|runtime
 #
 # bundled: the image contains the pinned agy in /usr/local/bin.
-# runtime: the image contains no agy; ax-harness installs it at task start.
+# runtime: the image contains no agy; ax-launcher installs it at task start.
 #
 # The expected agy version is AGY_VERSION when set (a build with a non-default
 # pinned version), otherwise PINNED_VERSION from install-agy.sh.
@@ -38,9 +38,10 @@ run() { docker run --rm --entrypoint sh "${img}" -c "$1"; }
 want="${AGY_VERSION:-${pinned}}"
 
 # No AX runner in the image; AX mounts it at /opt/ax.
-if run 'test -e /usr/local/bin/ax-task-runner || test -e /opt/ax/ax-task-runner'; then
-  fail "image must not contain ax-task-runner"
+if run 'test -e /usr/local/bin/ax-runner || test -e /opt/ax/ax-runner || test -e /usr/local/bin/ax-task-runner || test -e /opt/ax/ax-task-runner'; then
+  fail "image must not contain ax-runner or ax-task-runner"
 fi
+run 'test -x /usr/local/bin/ax-launcher' || fail "missing /usr/local/bin/ax-launcher"
 run 'test -x /usr/local/bin/ax-harness' || fail "missing /usr/local/bin/ax-harness"
 run 'test -x /usr/local/share/ax/install-agy.sh' || fail "missing install-agy.sh"
 run 'git --version && python3 --version' >/dev/null || fail "missing git or python3"
