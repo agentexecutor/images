@@ -430,26 +430,26 @@ func TestSession(t *testing.T) {
 		}
 	}
 	log := e.api.entries()
-	nEnv := 0
+	nEnv, nDel := 0, 0
 	for _, l := range log {
-		if l.Path == "/v1beta/environments" {
+		if l.Method == "POST" && l.Path == "/v1beta/environments" {
 			nEnv++
 		}
-		if l.Method == "DELETE" {
-			t.Errorf("session deleted its environment: %s", l.Path)
+		if l.Method == "DELETE" && strings.HasPrefix(l.Path, "/v1beta/environments/") {
+			nDel++
 		}
 	}
-	if nEnv != 1 {
-		t.Errorf("created %d environments, want 1", nEnv)
+	if nEnv != 2 || nDel != 2 {
+		t.Errorf("created %d deleted %d environments, want 2 created and 2 deleted", nEnv, nDel)
 	}
 	p := interactionPosts(log)
-	if _, ok := p[0]["previous_interaction_id"]; ok || p[1]["previous_interaction_id"] != "int1" || p[1]["environment"] != "env1" {
+	if _, ok := p[0]["previous_interaction_id"]; ok || p[1]["previous_interaction_id"] != "int1" || p[1]["environment"] != "env2" {
 		t.Errorf("turns %v", p)
 	}
 	path := filepath.Join(e.ws, ".ax", "sessions", "sess-1", stateFile)
 	st, err := loadState(filepath.Dir(path))
-	if err != nil || st.LastInteractionID != "int2" || st.Pending != nil || st.Environment.Key != "ek_env1" {
-		t.Errorf("state %+v err %v", st, err)
+	if err != nil || st.LastInteractionID != "int2" || st.Pending != nil || st.Environment != nil {
+		t.Errorf("state %+v err %v; want LastInteractionID=int2, Pending=nil, Environment=nil", st, err)
 	}
 	if fi, _ := os.Stat(path); fi.Mode().Perm() != 0o600 {
 		t.Errorf("state mode %v, want 0600", fi.Mode().Perm())
@@ -676,23 +676,36 @@ func TestRequiresActionClearsPendingAndDeletesEnv(t *testing.T) {
 		}
 	})
 
-	t.Run("session_clears_pending_for_next_launch", func(t *testing.T) {
+	t.Run("session_deletes_env_and_clears_pending", func(t *testing.T) {
 		e := newEnv(t)
 		session := filepath.Join(e.runDir, "session-id")
 		os.WriteFile(session, []byte("sess-ra\n"), 0o644)
+		// First turn succeeds to populate LastInteractionID, then second turn hits requires_action.
+		if code, _, stderr := e.run("turn one", "{}", "AX_SESSION_FILE="+session); code != 0 {
+			t.Fatalf("turn one: code=%d stderr=%s", code, stderr)
+		}
 		if code, _, _ := e.run("status=requires_action", "{}", "AX_SESSION_FILE="+session); code != 1 {
-			t.Fatalf("code=%d, want 1", code)
+			t.Fatalf("turn two: code=%d, want 1", code)
+		}
+		nDel := 0
+		for _, l := range e.api.entries() {
+			if l.Method == "DELETE" && strings.HasPrefix(l.Path, "/v1beta/environments/") {
+				nDel++
+			}
+		}
+		if nDel != 2 {
+			t.Fatalf("expected both session environments deleted, got %d DELETE calls", nDel)
 		}
 		sessDir := filepath.Join(e.ws, ".ax", "sessions", "sess-ra")
 		st, err := loadState(sessDir)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if st.Pending != nil {
-			t.Fatalf("expected st.Pending to be cleared after requires_action cancel, got %+v", st.Pending)
+		if st.Pending != nil || st.Environment != nil {
+			t.Fatalf("expected Pending and Environment cleared after requires_action cancel, got %+v", st)
 		}
-		if st.Environment == nil || st.Environment.ID != "env1" {
-			t.Fatalf("expected session environment to remain saved, got %+v", st.Environment)
+		if st.LastInteractionID != "int1" {
+			t.Fatalf("expected prior LastInteractionID int1 preserved, got %q", st.LastInteractionID)
 		}
 	})
 }

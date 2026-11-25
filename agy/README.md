@@ -99,25 +99,22 @@ automatically. The Gemini API calls them, not the sandbox, so:
 
 ## Restarts
 
-When `AX_SESSION_FILE` is empty, each task gets a new environment that is
-deleted when the task ends. When `AX_SESSION_FILE` carries a session ID, the
-environment is kept under `<workspace>/.ax/sessions/<id>` so follow-up turns
-reuse it.
+Each turn creates an ephemeral self-hosted environment and deletes it when the
+turn finishes (removing the environment key from disk as well). When
+`AX_SESSION_FILE` carries a session ID, `last_interaction_id` is retained in
+`<workspace>/.ax/sessions/<id>/managed-agent.json` so follow-up turns continue
+from `previous_interaction_id` on a fresh environment.
 
-Note: `ax-server` in `google/ax` currently defaults `spec.sessionId` to
-`metadata.uid` when omitted, so every server-created task passes a non-empty
-`AX_SESSION_FILE` and retains its remote environment until that contract is
-updated.
-
-When AX suspends a task, the harness leaves the interaction running and exits.
-On resume, AX relaunches it with the same config, and it reattaches to the
-interaction instead of starting a new one. A relaunch after the interaction
-finished does nothing. The state it needs is in `<workspace>/.ax`.
+When AX suspends a task mid-interaction, the harness leaves both the
+interaction and the environment running and exits. On resume, AX relaunches it
+with the same config, and it reattaches to the interaction instead of starting
+a new one. A relaunch after the interaction finished does nothing. The state it
+needs is in `<workspace>/.ax`.
 
 ## Security
 
 - `GEMINI_API_KEY` is removed from the tool worker's environment, so the agent's commands don't inherit it. They run as the same user as the harness, though, so treat the key as readable from the sandbox.
-- The environment key is stored in `<workspace>/.ax` (mode `0600`) so a relaunched harness can reconnect.
+- The environment key is stored in `<workspace>/.ax` (mode `0600`) only while an interaction is in flight (so a relaunched harness can reattach after suspend) and deleted once the turn finishes.
 - The Gateway can't inject `GEMINI_API_KEY` yet. Injecting it needs an `https` rule with `replaceHeaders`, but the tool worker connects to the same host over a WebSocket, and the egress gateway rejects WebSocket upgrades on `https` rules. Use `tlsPassthrough` and pass the key in `spec.env` until it supports them.
 
 ## Build and Test
