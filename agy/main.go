@@ -31,9 +31,12 @@
 //	AX_MCP_CONFIG_FILE  optional path to the Workspace's MCP servers; HTTP
 //	                    servers are added to the interaction's tools, which
 //	                    the Gemini API calls (stdio servers are skipped)
-//	AX_SESSION_FILE     optional path to spec.sessionId; when non-empty, the
-//	                    environment is kept in <workspace>/.ax/sessions/<id>
-//	                    and follow-up turns continue the previous interaction
+//	AX_SESSION_FILE     optional path to spec.sessionId; when non-empty,
+//	                    the last interaction ID is kept in
+//	                    <workspace>/.ax/sessions/<id> so follow-up turns
+//	                    continue from previous_interaction_id. The remote
+//	                    self-hosted environment is deleted at the end of each
+//	                    turn (kept only while suspended mid-interaction).
 //	AX_OUTPUT_FILE      optional path the agent's final answer is written to
 //	                    (<workspace>/.ax/output by default)
 //	cwd                 the task's workspace; the tools' root and working dir
@@ -641,32 +644,34 @@ func (h *harness) applyMCP(cfg *config) error {
 	return nil
 }
 
-// finish keeps a session's environment for its next turn, and deletes a
-// one-off task's environment.
+// finish deletes the task's remote self-hosted environment so neither one-off
+// tasks nor multi-turn sessions leak remote environments or leave environment
+// keys parked on disk. For sessions, it keeps last_interaction_id on disk so
+// follow-up turns continue from previous_interaction_id.
 func (h *harness) finish(api *client, st *state, sessionID string) {
-	if sessionID != "" {
-		if err := st.save(); err != nil {
-			h.logf("saving session state: %v", err)
-		}
-		return
-	}
 	if st.Environment != nil {
 		dctx, cancel := context.WithTimeout(context.Background(), cleanupTimeout)
 		defer cancel()
 		if err := api.deleteEnvironment(dctx, st.Environment.ID); err != nil {
 			h.logf("failed to delete environment %s: %v", st.Environment.ID, err)
 		}
+		st.Environment = nil
 	}
-	if st.Done == "" {
+	next := &state{
+		path: st.path,
+		Done: st.Done,
+	}
+	if sessionID != "" {
+		next.LastInteractionID = st.LastInteractionID
+	}
+	if next.Done == "" && next.LastInteractionID == "" {
 		if err := st.remove(); err != nil {
 			h.logf("%v", err)
 		}
 		return
 	}
-	// Keep only the record that this input finished.
-	done := &state{path: st.path, Done: st.Done}
-	if err := done.save(); err != nil {
-		h.logf("%v", err)
+	if err := next.save(); err != nil {
+		h.logf("saving state: %v", err)
 	}
 }
 
