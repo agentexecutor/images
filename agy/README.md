@@ -1,4 +1,4 @@
-# Antigravity Managed Agent Image (`agy`)
+# Antigravity in Gemini API (`agy`)
 
 Runs a [Gemini API Managed Agent](https://ai.google.dev/gemini-api/docs/agents)
 (Antigravity by default) as an AX task. The agent loop runs in the Gemini API;
@@ -34,6 +34,7 @@ metadata:
   atespace: default
 spec:
   profile:
+    # Find the digest at https://github.com/orgs/agentexecutor/packages?repo_name=images
     image: "ghcr.io/agentexecutor/agy@sha256:<digest>"
   gateway:
     name: antigravity-gw
@@ -52,9 +53,6 @@ spec:
     systemInstruction: "Run the tests before you finish."
     timeout: 30m
 ```
-
-Instead of `commands` and `inputs`, a task can set `spec.goal.text`, which is
-then the input. Setting both `spec.goal.text` and `inputs` is an error.
 
 Add egress rules for anything the agent's commands need, such as `github.com`
 or package registries.
@@ -116,10 +114,3 @@ needs is in `<workspace>/.ax`.
 - `GEMINI_API_KEY` is removed from the tool worker's environment, so the agent's commands don't inherit it. They run as the same user as the harness, though, so treat the key as readable from the sandbox.
 - The environment key is stored in `<workspace>/.ax` (mode `0600`) only while an interaction is in flight (so a relaunched harness can reattach after suspend) and deleted once the turn finishes.
 - The Gateway can't inject `GEMINI_API_KEY` yet. Injecting it needs an `https` rule with `replaceHeaders`, but the tool worker connects to the same host over a WebSocket, and the egress gateway rejects WebSocket upgrades on `https` rules. Use `tlsPassthrough` and pass the key in `spec.env` until it supports them.
-
-## Build and Test
-
-```bash
-(cd agy && go test ./...)
-docker build -t ax-agy ./agy
-```
