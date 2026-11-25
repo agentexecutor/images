@@ -36,6 +36,10 @@ on:
     paths:
       - '.github/workflows/release.yaml'
       - 'agents/**/Dockerfile'
+      - 'antigravity/Dockerfile'
+      - 'antigravity/*.go'
+      - 'antigravity/go.mod'
+      - 'antigravity/go.sum'
       - 'fakes/**/Dockerfile'
   workflow_dispatch:
     inputs:
@@ -125,9 +129,14 @@ env:
   # default is, until the licensing question in #15 is answered.
   # mock-gemini-api is a fake Gemini API server for testing antigravity, not an
   # agent image; the name says so.
+  # antigravity-managed runs a Gemini API Managed Agent (antigravity/ in repo root).
+  # Published under a separate name until the egress gateway supports WebSockets
+  # (agent-substrate/substrate#3885), keeping ghcr.io/agentexecutor/antigravity
+  # secret-free for existing demos and guides.
   IMAGE_CATALOG: |
     [
       {"name": "antigravity", "context": "agents/antigravity", "build_args": {"PREINSTALL_AGY": "false"}},
+      {"name": "antigravity-managed", "context": "antigravity"},
       {"name": "mock-gemini-api", "context": "fakes/mock-gemini"}
     ]
 

@@ -25,7 +25,7 @@
 // github.com/google/ax):
 //
 //	AX_GOAL_FILE        path to the task's goal (spec.goal.text), sent as the
-//	                    interaction's input unless spec.config.input is set
+//	                    interaction's input unless spec.config.inputs is set
 //	AX_CONFIG_FILE      optional path to spec.config as JSON: interaction
 //	                    request fields and harness options (see config)
 //	AX_MCP_CONFIG_FILE  optional path to the Workspace's MCP servers; HTTP
@@ -35,7 +35,7 @@
 //	                    environment is kept in <workspace>/.ax/sessions/<id>
 //	                    and follow-up turns continue the previous interaction
 //	AX_OUTPUT_FILE      optional path the agent's final answer is written to
-//	                    (AX reports it as status.outcome.output)
+//	                    (<workspace>/.ax/output by default)
 //	cwd                 the task's workspace; the tools' root and working dir
 //
 // Optional environment variables:
