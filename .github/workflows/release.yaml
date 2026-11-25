@@ -124,15 +124,13 @@ env:
   # --build-arg KEY=VALUE.
   #
   # claude-code and its test server mock-anthropic are intentionally excluded
-  # (paused; #12). agy-cli is built with PREINSTALL_AGY=false so a
-  # published image never bundles the agy binary, whatever the Dockerfile's
-  # default is, until the licensing question in #15 is answered.
+  # (paused; #12).
   # mock-gemini-api is a fake Gemini API server for testing agy-cli, not an
   # agent image; the name says so.
   # agy runs a Gemini API Managed Agent.
   IMAGE_CATALOG: |
     [
-      {"name": "agy-cli", "context": "agy-cli", "build_args": {"PREINSTALL_AGY": "false"}},
+      {"name": "agy-cli", "context": "agy-cli"},
       {"name": "agy", "context": "agy"},
       {"name": "mock-gemini-api", "context": "fakes/mock-gemini"}
     ]

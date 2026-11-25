@@ -17,6 +17,8 @@
 # ax-launcher (installed from agy-cli/ax-harness): Antigravity CLI (agy)
 # launcher for the AX in-container wrapper contract.
 #
+# TODO: Replace this script with a Go binary.
+#
 # Inputs provided by the mounted AX runner (see runner/launcher.go in
 # github.com/google/ax):
 #   AX_GOAL_FILE        path to the task's goal (spec.goal.text)
@@ -37,13 +39,6 @@
 #   AX_SESSION_DIR       override the durable session directory when
 #                        AX_SESSION_FILE is set (default:
 #                        <workspace>/.ax/sessions/<sessionId>)
-#   AGY_RUNTIME_INSTALL  "true" to install agy at startup when the image does
-#                        not include it (needs egress to storage.googleapis.com)
-#   AGY_VERSION          version installed at runtime; must be pinned in
-#                        install-agy.sh (default: install-agy.sh's pinned version)
-#   AGY_INSTALL_DIR      where agy is installed at runtime (default:
-#                        <workspace>/.ax/bin, so a resumed sandbox reuses it)
-#   AGY_INSTALL_SCRIPT   installer script path (default: /usr/local/share/ax/install-agy.sh)
 #   AGY_BIN              binary name or path (default: "agy")
 #   AX_CA_BUNDLE         CA bundle path (default: /run/ate/egress-trust-bundle/trust-bundle.pem)
 
@@ -92,10 +87,7 @@ if [[ -n "${session_id}" ]]; then
     resume_session="true"
   fi
 fi
-install_dir="${AGY_INSTALL_DIR:-${PWD}/.ax/bin}"
-# Appended, so an agy installed in the image always wins over a leftover
-# runtime install in the workspace.
-export PATH="${PATH}:${HOME}/.local/bin:${install_dir}"
+export PATH="${PATH}:${HOME}/.local/bin"
 export AGY_CLI_DISABLE_AUTO_UPDATE="${AGY_CLI_DISABLE_AUTO_UPDATE:-true}"
 
 ca_bundle="${AX_CA_BUNDLE:-/run/ate/egress-trust-bundle/trust-bundle.pem}"
@@ -104,24 +96,9 @@ if [[ -f "${ca_bundle}" ]]; then
   export CURL_CA_BUNDLE="${CURL_CA_BUNDLE:-${ca_bundle}}"
 fi
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 AGY_BIN="${AGY_BIN:-agy}"
 if ! command -v "${AGY_BIN}" >/dev/null 2>&1; then
-  if [[ "${AGY_RUNTIME_INSTALL:-}" != "true" ]]; then
-    echo "ax-launcher: ${AGY_BIN} not found; use an image built with PREINSTALL_AGY=true or set AGY_RUNTIME_INSTALL=true" >&2
-    exit 127
-  fi
-  default_installer="/usr/local/share/ax/install-agy.sh"
-  if [[ ! -x "${default_installer}" && -x "${SCRIPT_DIR}/install-agy.sh" ]]; then
-    default_installer="${SCRIPT_DIR}/install-agy.sh"
-  fi
-  installer="${AGY_INSTALL_SCRIPT:-${default_installer}}"
-  echo "ax-launcher: ${AGY_BIN} not found on PATH; installing agy ${AGY_VERSION:-(pinned)} to ${install_dir}..." >&2
-  "${installer}" "${AGY_VERSION:-}" "${install_dir}"
-fi
-
-if ! command -v "${AGY_BIN}" >/dev/null 2>&1; then
-  echo "ax-launcher: ${AGY_BIN} is still not available on PATH after install" >&2
+  echo "ax-launcher: ${AGY_BIN} not found on PATH" >&2
   exit 127
 fi
 

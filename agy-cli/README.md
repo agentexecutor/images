@@ -15,10 +15,6 @@ metadata:
   atespace: default
 spec:
   egress:
-    - tlsPassthrough:
-        hostnames: ["storage.googleapis.com"] # runtime agy install
-        ports:
-          numbers: [443]
     - https:
         hostnames: ["generativelanguage.googleapis.com"]
         effects:
@@ -42,17 +38,14 @@ spec:
   gateway:
     name: antigravity-gw
   env:
-    - name: AGY_RUNTIME_INSTALL
-      value: "true"
     - name: GEMINI_API_KEY
       value: placeholder # replaced outside the sandbox by antigravity-gw
   goal:
     text: "Create /workspace/hello.py that prints hello, and run it."
 ```
 
-Published images don't include `agy`, so the task sets `AGY_RUNTIME_INSTALL`
-to install it at startup, and the Gateway allows `storage.googleapis.com`. The
-Gateway injects the real API key outside the sandbox; the task only sees a
+The image includes the latest `agy` at the time it was built. The Gateway
+injects the real API key outside the sandbox; the task only sees a
 placeholder. The Secret setup is described under "Injecting credentials" in
 google/ax's `docs/manifests.md`.
 
@@ -76,7 +69,6 @@ The answer is printed and written to `<workspace>/.ax/output`.
 | `GEMINI_API_KEY` | Gemini API key. |
 | `AGY_ADC_AUTH` | `true` to use Application Default Credentials and Vertex AI (`GOOGLE_CLOUD_PROJECT`) instead. |
 | `GOOGLE_GEMINI_BASE_URL` | Alternative Gemini API endpoint. |
-| `AGY_RUNTIME_INSTALL` | `true` to install `agy` at startup. Needs egress to `storage.googleapis.com`. |
 
 ## MCP servers
 
@@ -92,4 +84,3 @@ it.
 ## Security
 
 - With an `https` Gateway rule, the API key never enters the sandbox.
-- Only pinned `agy` versions are installed, and each download is verified.
