@@ -12,18 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-name: antigravity
+name: agy-cli
 
 on:
   pull_request:
     paths:
-      - 'agents/antigravity/**'
-      - '.github/workflows/antigravity.yaml'
+      - 'agy-cli/**'
+      - '.github/workflows/agy-cli.yaml'
   push:
     branches: [main]
     paths:
-      - 'agents/antigravity/**'
-      - '.github/workflows/antigravity.yaml'
+      - 'agy-cli/**'
+      - '.github/workflows/agy-cli.yaml'
   workflow_dispatch:
     inputs:
       agy_version:
@@ -48,11 +48,11 @@ jobs:
         with:
           persist-credentials: false
       - name: Test ax-harness launcher
-        run: agents/antigravity/test_harness.sh
+        run: agy-cli/test_harness.sh
       - name: Dockerfile AGY_VERSION matches install-agy.sh
         run: |
-          pinned="$(sed -n 's/^PINNED_VERSION="\(.*\)"$/\1/p' agents/antigravity/install-agy.sh)"
-          arg="$(sed -n 's/^ARG AGY_VERSION=//p' agents/antigravity/Dockerfile)"
+          pinned="$(sed -n 's/^PINNED_VERSION="\(.*\)"$/\1/p' agy-cli/install-agy.sh)"
+          arg="$(sed -n 's/^ARG AGY_VERSION=//p' agy-cli/Dockerfile)"
           if [[ -z "${pinned}" || "${pinned}" != "${arg}" ]]; then
             echo "::error::Dockerfile ARG AGY_VERSION=${arg} must equal PINNED_VERSION=${pinned} in install-agy.sh"
             exit 1
@@ -84,21 +84,21 @@ jobs:
       # release.yaml) until the licensing question in #15 is answered.
       - name: Build and verify the runtime-install image (no agy inside)
         run: |
-          img="ax-antigravity:runtime-${{ matrix.arch }}"
+          img="ax-agy-cli:runtime-${{ matrix.arch }}"
           docker build \
             --build-arg PREINSTALL_AGY=false \
             ${AGY_VERSION:+--build-arg "AGY_VERSION=${AGY_VERSION}"} \
             -t "${img}" \
-            agents/antigravity
-          agents/antigravity/verify_image.sh "${img}" runtime
+            agy-cli
+          agy-cli/verify_image.sh "${img}" runtime
 
       - name: Build and verify the bundled image (pinned agy inside, not pushed)
         run: |
-          img="ax-antigravity:bundled-${{ matrix.arch }}"
+          img="ax-agy-cli:bundled-${{ matrix.arch }}"
           docker build \
             --build-arg PREINSTALL_AGY=true \
             ${AGY_VERSION:+--build-arg "AGY_VERSION=${AGY_VERSION}"} \
             -t "${img}" \
-            agents/antigravity
-          agents/antigravity/verify_image.sh "${img}" bundled
+            agy-cli
+          agy-cli/verify_image.sh "${img}" bundled
           docker rmi "${img}" >/dev/null

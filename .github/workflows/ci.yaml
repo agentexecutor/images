@@ -84,18 +84,18 @@ jobs:
             -H "x-goog-api-key: ci-test-key" -H "content-type: application/json" \
             -d '{"contents":[{"role":"user","parts":[{"text":"hi"}]}]}' | grep -q "MOCK_OK"
 
-  antigravity-managed:
-    name: Antigravity managed agent (go test & vet)
+  agy:
+    name: agy managed agent (go test & vet)
     runs-on: ubuntu-24.04
     defaults:
       run:
-        working-directory: antigravity
+        working-directory: agy
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - uses: actions/setup-go@f111f3307d8850f501ac008e886eec1fd1932a34 # v5.3.0
         with:
-          go-version-file: antigravity/go.mod
+          go-version-file: agy/go.mod
       - run: go vet ./...
       - run: go test -race -count=1 ./...

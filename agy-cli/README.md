@@ -1,4 +1,4 @@
-# Antigravity Agent Image (`agents/antigravity`)
+# Antigravity Agent Image (`agy-cli`)
 
 Pure mount-ready container image and launcher (`ax-harness`) for running
 headless [Antigravity CLI (`agy`)](https://antigravity.google/docs/cli/install)
@@ -48,7 +48,7 @@ metadata:
   atespace: default
 spec:
   profile:
-    image: "ghcr.io/agentexecutor/antigravity@sha256:<digest>"
+    image: "ghcr.io/agentexecutor/agy-cli@sha256:<digest>"
     resources:
       limits:
         cpu: "2"
@@ -132,7 +132,7 @@ downloaded files), then update `PINNED_VERSION` and `ARG AGY_VERSION`.
 - **Bundled (`PREINSTALL_AGY=true`, current default):** Installs the pinned `agy` into `/usr/local/bin` during `docker build`, so tasks need no extra egress and `ax ssh` sessions have `agy` right away. An `agy` in the image always wins over a runtime install left in the workspace.
 
 **Published images are always runtime-install for now:** `release.yaml` builds
-`antigravity` with `PREINSTALL_AGY=false` until shipping the `agy` binary in a
+`agy-cli` with `PREINSTALL_AGY=false` until shipping the `agy` binary in a
 public image is cleared (#15), whatever the Dockerfile's default is.
 
 **Memory limits:** Runtime installation downloads a ~100 MB archive and unpacks
@@ -145,13 +145,13 @@ are available.
 ## Local Build & Test
 
 ```bash
-./agents/antigravity/test_harness.sh
+./agy-cli/test_harness.sh
 
 # Runtime-install image (no agy binary inside):
-docker build --build-arg PREINSTALL_AGY=false -t ax-antigravity:runtime ./agents/antigravity
-./agents/antigravity/verify_image.sh ax-antigravity:runtime runtime
+docker build --build-arg PREINSTALL_AGY=false -t ax-agy-cli:runtime ./agy-cli
+./agy-cli/verify_image.sh ax-agy-cli:runtime runtime
 
 # Bundled image (pinned agy inside):
-docker build --build-arg PREINSTALL_AGY=true -t ax-antigravity:bundled ./agents/antigravity
-./agents/antigravity/verify_image.sh ax-antigravity:bundled bundled
+docker build --build-arg PREINSTALL_AGY=true -t ax-agy-cli:bundled ./agy-cli
+./agy-cli/verify_image.sh ax-agy-cli:bundled bundled
 ```
