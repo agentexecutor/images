@@ -1,26 +1,11 @@
-# Antigravity Agent Image (`agy-cli`)
+# Antigravity CLI (`agy-cli`)
 
-Pure mount-ready container image and launcher (`ax-launcher`) for running
-headless [Antigravity CLI (`agy`)](https://antigravity.google/docs/cli/install)
-tasks under the AX in-container wrapper contract. Contains no AX runner binary
-(`ax-runner` is mounted read-only by AX at `/opt/ax`).
+Runs the [Antigravity CLI (`agy`)](https://antigravity.google/docs/cli/install)
+headless as an AX task. The agent and its tools run inside the task's sandbox,
+in its workspace (`/workspace`). Like the other images, it needs an AX runner
+volume.
 
-## Requirement: AX Runner Volume
-
-This image has no `ax-runner`, so it only starts as an AX task when
-ax-server mounts a runner volume image: `ax install --runner-volume-image=...`
-or `AX_RUNNER_VOLUME_IMAGE` on ax-server. Release manifests may leave it empty
-(google/ax#625). Without it, AX runs `/usr/local/bin/ax-runner`, which
-this image doesn't have, and the task fails to start.
-
-## Example Task (published image)
-
-Published images have no `agy` binary (see "Builds" below), so the task opts
-in to the runtime install and its Gateway allows `storage.googleapis.com`
-alongside the Gemini API. With a bundled build, drop `AGY_RUNTIME_INSTALL` and
-the `storage.googleapis.com` rule. The Gateway adds the real API key outside
-the sandbox; the task only sees a placeholder. The Secret setup is described under "Injecting credentials" in
-google/ax's `docs/manifests.md`.
+## Example
 
 ```yaml
 apiVersion: ax.io/v1alpha1
@@ -48,6 +33,7 @@ metadata:
   atespace: default
 spec:
   profile:
+    # Find the digest at https://github.com/orgs/agentexecutor/packages?repo_name=images
     image: "ghcr.io/agentexecutor/agy-cli@sha256:<digest>"
     resources:
       limits:
@@ -64,95 +50,46 @@ spec:
     text: "Create /workspace/hello.py that prints hello, and run it."
 ```
 
+Published images don't include `agy`, so the task sets `AGY_RUNTIME_INSTALL`
+to install it at startup, and the Gateway allows `storage.googleapis.com`. The
+Gateway injects the real API key outside the sandbox; the task only sees a
+placeholder. The Secret setup is described under "Injecting credentials" in
+google/ax's `docs/manifests.md`.
+
+Give the task at least `2Gi` of memory (`4Gi` recommended); the default
+`512Mi` is too small for `agy` and its session state.
+
+## Config
+
+`spec.goal.text` is the prompt. Keys in `spec.config` are `agy` CLI flags in
+camelCase (`addDir` for `--add-dir`), with two exceptions:
+
+| Key | Type | Description |
+| --- | --- | --- |
+| `settings` | object | `agy` settings, merged into `--settings`. |
+| `outputFile` | string | Extra path to write the answer to. |
+
 The answer is printed and written to `<workspace>/.ax/output`.
 
-> **Memory sizing:** The `/workspace` durable volume is memory-backed, so
-> `agy`'s conversation history and logs under `<workspace>/.ax/sessions/<id>`
-> (plus a runtime-installed `agy` binary under `<workspace>/.ax/bin`) count
-> against `resources.limits.memory`. Keep at least `2Gi`–`4Gi` (the default
-> `512Mi` is too small once `agy` and session state live in `/workspace`).
+| Environment variable | Description |
+| --- | --- |
+| `GEMINI_API_KEY` | Gemini API key. |
+| `AGY_ADC_AUTH` | `true` to use Application Default Credentials and Vertex AI (`GOOGLE_CLOUD_PROJECT`) instead. |
+| `GOOGLE_GEMINI_BASE_URL` | Alternative Gemini API endpoint. |
+| `AGY_RUNTIME_INSTALL` | `true` to install `agy` at startup. Needs egress to `storage.googleapis.com`. |
 
-## Interactive Use (`ax ssh`)
+## MCP servers
 
-An `ax ssh` session never runs the launcher, so it gets none of the setup
-`ax-launcher` does. A bundled build already has `agy` on `PATH`. With a
-runtime-install build, install `agy` once per workspace; the image puts
-`/workspace/.ax/bin` on `PATH` (after the system paths), so a copy installed
-by an earlier goal task is found as well:
+The Workspace's MCP servers are added to `agy`. They run in the sandbox, so
+their endpoints must be reachable from the task.
 
-```bash
-/usr/local/share/ax/install-agy.sh "" /workspace/.ax/bin  # runtime-install builds only
-export SSL_CERT_FILE=/run/ate/egress-trust-bundle/trust-bundle.pem  # trust the egress gateway
-agy --settings='{"modelProvider":"gemini"}'                         # with GEMINI_API_KEY set
-```
+## Restarts
 
-To continue an earlier goal task's session interactively from `ax ssh`:
+When `spec.sessionId` is set, the conversation is kept in the workspace, so it
+survives suspend and resume, and follow-up turns in the same session continue
+it.
 
-```bash
-mkdir -p ~/.gemini && ln -sfn /workspace/.ax/sessions/<sessionId> ~/.gemini/antigravity-cli
-agy --continue
-```
+## Security
 
-## Launcher Contract (`/usr/local/bin/ax-launcher`)
-
-The mounted AX runner prepares `/workspace`, writes task inputs to files, and
-invokes `/usr/local/bin/ax-launcher` (also symlinked at
-`/usr/local/bin/ax-harness` for older AX releases) with `/workspace` as the
-working directory (see `runner/launcher.go` in [google/ax](https://github.com/google/ax)):
-
-- `AX_GOAL_FILE` *(required)* — Path to the file holding the task prompt (`spec.goal.text`), passed as-is via `--print=<goal>`.
-- `AX_CONFIG_FILE` *(optional)* — Path to `spec.config` serialized as JSON. Every `camelCase` key maps to the matching `agy` `--kebab-case` CLI flag, with two special keys:
-  - `outputFile` — Optional extra path where `agy`'s answer is also written.
-  - `settings` — Merged into `--settings=<JSON>`.
-- `AX_MCP_CONFIG_FILE` *(optional)* — Path to the Workspace's MCP servers (`{"mcpServers": {...}}`). Each `http` (`url`) or `stdio` (`command` + `args`) server is registered with `agy mcp add` before the task runs; a malformed file fails the task.
-- `AX_OUTPUT_FILE` *(optional)* — Path where `agy`'s final answer is written atomically on exit (`<workspace>/.ax/output` by default); stale `<output>.tmp.*` files from interrupted runs are cleaned up at startup. The answer is always printed to stdout/logs as well, and `ax-launcher` exits with `agy`'s exit code.
-- `AX_SESSION_FILE` *(optional)* — Path to `spec.sessionId`. When non-empty, `ax-launcher` keeps `HOME` intact (preserving `~/.gitconfig`, `~/.ssh`, etc.), symlinks `~/.gemini/antigravity-cli` to `<workspace>/.ax/sessions/<sessionId>` (overridable via `AX_SESSION_DIR`) on the durable workspace volume so conversation state survives suspend/resume, and passes `--continue` when resuming an existing conversation in that session (unless `spec.config` already sets `continue` or `conversation`).
-- **Defaults:** `--dangerously-skip-permissions` (headless runs cannot answer interactive prompts) and `--add-dir=<cwd>` (so relative file-tool paths resolve inside `/workspace`).
-- **Authentication:**
-  - When `GEMINI_API_KEY` is set (and `AGY_ADC_AUTH` is unset), `ax-launcher` automatically sets `"modelProvider": "gemini"` in `--settings`; `GOOGLE_GEMINI_BASE_URL` optionally points requests at a gateway or mock endpoint.
-  - When `AGY_ADC_AUTH=true`, `agy` authenticates via Application Default Credentials against `GOOGLE_CLOUD_PROJECT` (Vertex AI).
-- **Egress TLS trust bundle:** When `/run/ate/egress-trust-bundle/trust-bundle.pem` is mounted by Agent Substrate, `ax-launcher` defaults `SSL_CERT_FILE` and `CURL_CA_BUNDLE` to it so both runtime installation (`curl`) and `agy` trust the egress gateway's TLS certificate during HTTPS credential injection.
-
-## Pinned `agy` Version
-
-`install-agy.sh` pins the `agy` version (`PINNED_VERSION`) along with each
-platform's release URL and SHA-512 checksum. The only network request is the
-tarball download from `storage.googleapis.com`, and the checksum never comes
-from the same bucket as the binary. Versions that are not pinned (including
-`latest`) are rejected.
-
-The Dockerfile's `ARG AGY_VERSION` must equal `PINNED_VERSION` (CI checks
-this), and the image records it as `AGY_VERSION` and the
-`io.agentexecutor.agy.version` label. To bump `agy`, add the new release's
-execution ID and the SHA-512 of each platform's tarball (computed from the
-downloaded files), then update `PINNED_VERSION` and `ARG AGY_VERSION`.
-
-## Builds: Runtime Install vs. Bundled
-
-- **Runtime install (`PREINSTALL_AGY=false`):** Ships Debian packages, `/usr/local/share/ax/install-agy.sh`, and `/usr/local/bin/ax-launcher`, with no `agy` binary. A task must opt in with `AGY_RUNTIME_INSTALL=true`, which installs the pinned `agy` into `/workspace/.ax/bin` (so a resumed sandbox reuses it) and needs egress to `storage.googleapis.com`. Without the opt-in, a missing `agy` fails the task with exit code `127`.
-- **Bundled (`PREINSTALL_AGY=true`, current default):** Installs the pinned `agy` into `/usr/local/bin` during `docker build`, so tasks need no extra egress and `ax ssh` sessions have `agy` right away. An `agy` in the image always wins over a runtime install left in the workspace.
-
-**Published images are always runtime-install for now:** `release.yaml` builds
-`agy-cli` with `PREINSTALL_AGY=false` until shipping the `agy` binary in a
-public image is cleared (#15), whatever the Dockerfile's default is.
-
-**Memory limits:** Runtime installation downloads a ~100 MB archive and unpacks
-a ~267 MB binary onto memory-backed sandbox volumes, which exceeds AX's default
-`512Mi` limit. Set `spec.profile.resources.limits.memory` to at least `2Gi`
-(`4Gi` recommended, as in the example above); `install-agy.sh` checks free
-space before downloading and fails fast if fewer than `450 MiB` (`AGY_MIN_FREE_MB`)
-are available.
-
-## Local Build & Test
-
-```bash
-./agy-cli/test_harness.sh
-
-# Runtime-install image (no agy binary inside):
-docker build --build-arg PREINSTALL_AGY=false -t ax-agy-cli:runtime ./agy-cli
-./agy-cli/verify_image.sh ax-agy-cli:runtime runtime
-
-# Bundled image (pinned agy inside):
-docker build --build-arg PREINSTALL_AGY=true -t ax-agy-cli:bundled ./agy-cli
-./agy-cli/verify_image.sh ax-agy-cli:bundled bundled
-```
+- With an `https` Gateway rule, the API key never enters the sandbox.
+- Only pinned `agy` versions are installed, and each download is verified.
