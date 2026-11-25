@@ -18,11 +18,12 @@
 #
 #   verify_image.sh <image> bundled|runtime
 #
-# bundled: the image contains the pinned agy in /usr/local/bin.
+# bundled: the image contains agy in /usr/local/bin.
 # runtime: the image contains no agy; ax-harness installs it at task start.
 #
 # The expected agy version is AGY_VERSION when set (a build with a non-default
-# pinned version), otherwise PINNED_VERSION from install-agy.sh.
+# version), otherwise the Dockerfile's ARG AGY_VERSION. For "latest", a bundled
+# image may contain any released agy version.
 
 set -euo pipefail
 
@@ -30,12 +31,12 @@ img="${1:?usage: verify_image.sh <image> bundled|runtime}"
 mode="${2:?usage: verify_image.sh <image> bundled|runtime}"
 DIR="$(cd "$(dirname "$0")" && pwd)"
 
-pinned="$(sed -n 's/^PINNED_VERSION="\(.*\)"$/\1/p' "${DIR}/install-agy.sh")"
+default="$(sed -n 's/^ARG AGY_VERSION=//p' "${DIR}/Dockerfile")"
 fail() { echo "::error::${img} (${mode}): $*" >&2; exit 1; }
 run() { docker run --rm --entrypoint sh "${img}" -c "$1"; }
 
-[[ -n "${pinned}" ]] || fail "cannot read PINNED_VERSION from install-agy.sh"
-want="${AGY_VERSION:-${pinned}}"
+[[ -n "${default}" ]] || fail "cannot read ARG AGY_VERSION from Dockerfile"
+want="${AGY_VERSION:-${default}}"
 
 # No AX runner in the image; AX mounts it at /opt/ax.
 if run 'test -e /usr/local/bin/ax-task-runner || test -e /opt/ax/ax-task-runner'; then
@@ -60,7 +61,12 @@ case "${mode}" in
     where="$(run 'command -v agy')" || fail "agy is not on PATH"
     [[ "${where}" == "/usr/local/bin/agy" ]] || fail "agy at ${where}, want /usr/local/bin/agy"
     got="$(docker run --rm --entrypoint agy "${img}" --version | tr -d '[:space:]')"
-    [[ "${got}" == "${want}" ]] || fail "agy --version=${got}, want ${want}"
+    if [[ "${want}" == "latest" ]]; then
+      [[ "${got}" =~ ^[0-9]+(\.[0-9]+)+$ ]] || fail "agy --version=${got}, want a release version"
+    else
+      [[ "${got}" == "${want}" ]] || fail "agy --version=${got}, want ${want}"
+    fi
+    want="${want} (${got})"
     ;;
   runtime)
     if run 'command -v agy >/dev/null 2>&1'; then

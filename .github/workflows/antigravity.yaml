@@ -27,7 +27,7 @@ on:
   workflow_dispatch:
     inputs:
       agy_version:
-        description: 'Antigravity CLI version pinned in install-agy.sh (empty uses the pinned default)'
+        description: 'Antigravity CLI version: latest or a version pinned in install-agy.sh (empty uses the Dockerfile default)'
         required: false
         default: ''
         type: string
@@ -49,12 +49,12 @@ jobs:
           persist-credentials: false
       - name: Test ax-harness launcher
         run: agents/antigravity/test_harness.sh
-      - name: Dockerfile AGY_VERSION matches install-agy.sh
+      - name: Dockerfile AGY_VERSION is latest or pinned in install-agy.sh
         run: |
           pinned="$(sed -n 's/^PINNED_VERSION="\(.*\)"$/\1/p' agents/antigravity/install-agy.sh)"
           arg="$(sed -n 's/^ARG AGY_VERSION=//p' agents/antigravity/Dockerfile)"
-          if [[ -z "${pinned}" || "${pinned}" != "${arg}" ]]; then
-            echo "::error::Dockerfile ARG AGY_VERSION=${arg} must equal PINNED_VERSION=${pinned} in install-agy.sh"
+          if [[ -z "${pinned}" || ( "${arg}" != "latest" && "${arg}" != "${pinned}" ) ]]; then
+            echo "::error::Dockerfile ARG AGY_VERSION=${arg} must be latest or PINNED_VERSION=${pinned} in install-agy.sh"
             exit 1
           fi
 
@@ -71,8 +71,7 @@ jobs:
             runner: ubuntu-24.04-arm
     runs-on: ${{ matrix.runner }}
     env:
-      # Empty builds the Dockerfile's AGY_VERSION (the version pinned in
-      # install-agy.sh).
+      # Empty builds the Dockerfile's AGY_VERSION (latest).
       AGY_VERSION: ${{ inputs.agy_version }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -92,7 +91,7 @@ jobs:
             agents/antigravity
           agents/antigravity/verify_image.sh "${img}" runtime
 
-      - name: Build and verify the bundled image (pinned agy inside, not pushed)
+      - name: Build and verify the bundled image (agy inside, not pushed)
         run: |
           img="ax-antigravity:bundled-${{ matrix.arch }}"
           docker build \

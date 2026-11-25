@@ -14,11 +14,11 @@
 
 # Pure Antigravity (agy) agent image for AX: no AX runner baked in.
 #
-# By default (PREINSTALL_AGY=true), the image installs the pinned Antigravity
+# By default (PREINSTALL_AGY=true), the image installs the latest Antigravity
 # CLI into /usr/local/bin at build time, alongside Debian packages,
 # /usr/local/share/ax/install-agy.sh, and /usr/local/bin/ax-harness. Pass
 # --build-arg PREINSTALL_AGY=false for a runtime-install image with no agy
-# binary, where ax-harness installs the pinned agy on startup only when a task
+# binary, where ax-harness installs the latest agy on startup only when a task
 # sets AGY_RUNTIME_INSTALL=true. Published images are runtime-install builds
 # until shipping the agy binary is cleared (see release.yaml).
 FROM debian:bookworm-slim@sha256:734a72b3d6142a71993b4bc580ca01d8ca687f77a2c422d96a961d3376b179bc
@@ -35,9 +35,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # The agy version this image installs, recorded in the image as AGY_VERSION
-# and a label. It must equal PINNED_VERSION in install-agy.sh (CI checks
-# this), so bump both together.
-ARG AGY_VERSION=1.5.10
+# and a label: "latest" (resolved when agy is installed, falling back to
+# PINNED_VERSION in install-agy.sh) or a version pinned in install-agy.sh.
+ARG AGY_VERSION=latest
 ARG PREINSTALL_AGY=true
 
 COPY install-agy.sh /usr/local/share/ax/install-agy.sh

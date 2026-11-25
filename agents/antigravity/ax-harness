@@ -30,9 +30,10 @@
 #
 # Optional environment variables:
 #   AGY_RUNTIME_INSTALL  "true" to install agy at startup when the image does
-#                        not include it (needs egress to storage.googleapis.com)
-#   AGY_VERSION          version installed at runtime; must be pinned in
-#                        install-agy.sh (default: install-agy.sh's pinned version)
+#                        not include it (needs egress to storage.googleapis.com,
+#                        and to the release manifest host for "latest")
+#   AGY_VERSION          version installed at runtime: "latest" or a version
+#                        pinned in install-agy.sh (default: latest)
 #   AGY_INSTALL_DIR      where agy is installed at runtime (default:
 #                        <workspace>/.ax/bin, so a resumed sandbox reuses it)
 #   AGY_INSTALL_SCRIPT   installer script path (default: /usr/local/share/ax/install-agy.sh)
@@ -74,7 +75,7 @@ if ! command -v "${AGY_BIN}" >/dev/null 2>&1; then
     default_installer="${SCRIPT_DIR}/install-agy.sh"
   fi
   installer="${AGY_INSTALL_SCRIPT:-${default_installer}}"
-  echo "ax-harness: ${AGY_BIN} not found on PATH; installing agy ${AGY_VERSION:-(pinned)} to ${install_dir}..." >&2
+  echo "ax-harness: ${AGY_BIN} not found on PATH; installing agy ${AGY_VERSION:-latest} to ${install_dir}..." >&2
   "${installer}" "${AGY_VERSION:-}" "${install_dir}"
 fi
 

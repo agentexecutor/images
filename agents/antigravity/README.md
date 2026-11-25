@@ -16,9 +16,9 @@ this image doesn't have, and the task fails to start.
 ## Example Task (published image)
 
 Published images have no `agy` binary (see "Builds" below), so the task opts
-in to the runtime install and its Gateway allows `storage.googleapis.com`
-alongside the Gemini API. With a bundled build, drop `AGY_RUNTIME_INSTALL` and
-the `storage.googleapis.com` rule. The Gateway adds the real API key outside
+in to the runtime install and its Gateway allows `storage.googleapis.com` and
+the `agy` release manifest host alongside the Gemini API. With a bundled
+build, drop `AGY_RUNTIME_INSTALL` and that rule. The Gateway adds the real API key outside
 the sandbox; the task only sees a placeholder. The Secret setup is described under "Injecting credentials" in
 google/ax's `docs/manifests.md`.
 
@@ -31,7 +31,11 @@ metadata:
 spec:
   egress:
     - tlsPassthrough:
-        hostnames: ["storage.googleapis.com"] # runtime agy install
+        # Runtime agy install: the release manifest (latest version) and the
+        # release bucket.
+        hostnames:
+          - "antigravity-cli-auto-updater-974169037036.us-central1.run.app"
+          - "storage.googleapis.com"
         ports:
           numbers: [443]
     - https:
@@ -99,24 +103,33 @@ invokes `/usr/local/bin/ax-harness` with `/workspace` as the working directory
   - When `AGY_ADC_AUTH=true`, `agy` authenticates via Application Default Credentials against `GOOGLE_CLOUD_PROJECT` (Vertex AI).
 - **Egress TLS trust bundle:** When `/run/ate/egress-trust-bundle/trust-bundle.pem` is mounted by Agent Substrate, `ax-harness` defaults `SSL_CERT_FILE` and `CURL_CA_BUNDLE` to it so both runtime installation (`curl`) and `agy` trust the egress gateway's TLS certificate during HTTPS credential injection.
 
-## Pinned `agy` Version
+## `agy` Version
 
-`install-agy.sh` pins the `agy` version (`PINNED_VERSION`) along with each
-platform's release URL and SHA-512 checksum. The only network request is the
-tarball download from `storage.googleapis.com`, and the checksum never comes
-from the same bucket as the binary. Versions that are not pinned (including
-`latest`) are rejected.
+`install-agy.sh` installs the latest `agy` release by default. It reads the
+release's version, URL, and SHA-512 from the Antigravity release manifest
+(`antigravity-cli-auto-updater-974169037036.us-central1.run.app`, the one the
+[official installer](https://antigravity.google/cli/install.sh) uses), accepts
+only URLs in the Antigravity release bucket on `storage.googleapis.com`, and
+verifies the tarball against the manifest's checksum. So image builds and
+runtime installs at different times can get different `agy` versions.
 
-The Dockerfile's `ARG AGY_VERSION` must equal `PINNED_VERSION` (CI checks
+If the manifest or the download fails, `install-agy.sh` falls back to the
+version pinned in the script (`PINNED_VERSION`), whose release URL and SHA-512
+are in the script itself. To install only that version, set `AGY_VERSION` (a
+build arg, or a task env var for runtime installs) to it; other versions are
+rejected. To bump the fallback, add the new release's execution ID and the
+SHA-512 of each platform's tarball (computed from the downloaded files), then
+update `PINNED_VERSION`.
+
+The Dockerfile's `ARG AGY_VERSION` is `latest` or `PINNED_VERSION` (CI checks
 this), and the image records it as `AGY_VERSION` and the
-`io.agentexecutor.agy.version` label. To bump `agy`, add the new release's
-execution ID and the SHA-512 of each platform's tarball (computed from the
-downloaded files), then update `PINNED_VERSION` and `ARG AGY_VERSION`.
+`io.agentexecutor.agy.version` label. With `latest`, `agy --version` gives the
+version actually installed.
 
 ## Builds: Runtime Install vs. Bundled
 
-- **Runtime install (`PREINSTALL_AGY=false`):** Ships Debian packages, `/usr/local/share/ax/install-agy.sh`, and `/usr/local/bin/ax-harness`, with no `agy` binary. A task must opt in with `AGY_RUNTIME_INSTALL=true`, which installs the pinned `agy` into `/workspace/.ax/bin` (so a resumed sandbox reuses it) and needs egress to `storage.googleapis.com`. Without the opt-in, a missing `agy` fails the task with exit code `127`.
-- **Bundled (`PREINSTALL_AGY=true`, current default):** Installs the pinned `agy` into `/usr/local/bin` during `docker build`, so tasks need no extra egress and `ax ssh` sessions have `agy` right away. An `agy` in the image always wins over a runtime install left in the workspace.
+- **Runtime install (`PREINSTALL_AGY=false`):** Ships Debian packages, `/usr/local/share/ax/install-agy.sh`, and `/usr/local/bin/ax-harness`, with no `agy` binary. A task must opt in with `AGY_RUNTIME_INSTALL=true`, which installs the latest `agy` into `/workspace/.ax/bin` (so a resumed sandbox reuses it) and needs egress to `storage.googleapis.com` and the release manifest host (without the manifest host, the pinned fallback is installed). Without the opt-in, a missing `agy` fails the task with exit code `127`.
+- **Bundled (`PREINSTALL_AGY=true`, current default):** Installs the latest `agy` into `/usr/local/bin` during `docker build`, so tasks need no extra egress and `ax ssh` sessions have `agy` right away. An `agy` in the image always wins over a runtime install left in the workspace.
 
 **Published images are always runtime-install for now:** `release.yaml` builds
 `antigravity` with `PREINSTALL_AGY=false` until shipping the `agy` binary in a
@@ -131,7 +144,7 @@ public image is cleared (#15), whatever the Dockerfile's default is.
 docker build --build-arg PREINSTALL_AGY=false -t ax-antigravity:runtime ./agents/antigravity
 ./agents/antigravity/verify_image.sh ax-antigravity:runtime runtime
 
-# Bundled image (pinned agy inside):
+# Bundled image (agy inside):
 docker build --build-arg PREINSTALL_AGY=true -t ax-antigravity:bundled ./agents/antigravity
 ./agents/antigravity/verify_image.sh ax-antigravity:bundled bundled
 ```

@@ -136,7 +136,7 @@ run_runtime AGY_RUNTIME_INSTALL=true >/dev/null
 test "$(cat "${FAKE_HOME}/installed_versions.txt")" = "1.5.7"
 rm -rf "${TMP}/.ax"
 
-# 7d. Without AGY_VERSION, the installer gets an empty version (its pin).
+# 7d. Without AGY_VERSION, the installer gets an empty version (latest).
 rm -f "${FAKE_HOME}/installed_versions.txt"
 run_runtime AGY_RUNTIME_INSTALL=true >/dev/null
 test "$(cat "${FAKE_HOME}/installed_versions.txt")" = ""
