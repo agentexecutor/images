@@ -1,4 +1,4 @@
-module github.com/agentexecutor/images/antigravity
+module github.com/agentexecutor/images/agy
 
 go 1.26
 

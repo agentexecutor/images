@@ -35,11 +35,11 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/release.yaml'
-      - 'agents/**/Dockerfile'
-      - 'antigravity/Dockerfile'
-      - 'antigravity/*.go'
-      - 'antigravity/go.mod'
-      - 'antigravity/go.sum'
+      - 'agy-cli/Dockerfile'
+      - 'agy/Dockerfile'
+      - 'agy/*.go'
+      - 'agy/go.mod'
+      - 'agy/go.sum'
       - 'fakes/**/Dockerfile'
   workflow_dispatch:
     inputs:
@@ -124,19 +124,16 @@ env:
   # --build-arg KEY=VALUE.
   #
   # claude-code and its test server mock-anthropic are intentionally excluded
-  # (paused; #12). antigravity is built with PREINSTALL_AGY=false so a
+  # (paused; #12). agy-cli is built with PREINSTALL_AGY=false so a
   # published image never bundles the agy binary, whatever the Dockerfile's
   # default is, until the licensing question in #15 is answered.
-  # mock-gemini-api is a fake Gemini API server for testing antigravity, not an
+  # mock-gemini-api is a fake Gemini API server for testing agy-cli, not an
   # agent image; the name says so.
-  # antigravity-managed runs a Gemini API Managed Agent (antigravity/ in repo root).
-  # Published under a separate name until the egress gateway supports WebSockets
-  # (agent-substrate/substrate#3885), keeping ghcr.io/agentexecutor/antigravity
-  # secret-free for existing demos and guides.
+  # agy runs a Gemini API Managed Agent.
   IMAGE_CATALOG: |
     [
-      {"name": "antigravity", "context": "agents/antigravity", "build_args": {"PREINSTALL_AGY": "false"}},
-      {"name": "antigravity-managed", "context": "antigravity"},
+      {"name": "agy-cli", "context": "agy-cli", "build_args": {"PREINSTALL_AGY": "false"}},
+      {"name": "agy", "context": "agy"},
       {"name": "mock-gemini-api", "context": "fakes/mock-gemini"}
     ]
 

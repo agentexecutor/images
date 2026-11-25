@@ -1,4 +1,4 @@
-# Antigravity Managed Agent Image (`antigravity-managed`)
+# Antigravity Managed Agent Image (`agy`)
 
 Runs a [Gemini API Managed Agent](https://ai.google.dev/gemini-api/docs/agents)
 (Antigravity by default) as an AX task. The agent loop runs in the Gemini API;
@@ -34,7 +34,7 @@ metadata:
   atespace: default
 spec:
   profile:
-    image: "ghcr.io/agentexecutor/antigravity-managed@sha256:<digest>"
+    image: "ghcr.io/agentexecutor/agy@sha256:<digest>"
   gateway:
     name: antigravity-gw
   commands: ["/usr/local/bin/ax-antigravity"]
@@ -123,6 +123,6 @@ finished does nothing. The state it needs is in `<workspace>/.ax`.
 ## Build and Test
 
 ```bash
-(cd antigravity && go test ./...)
-docker build -t ax-antigravity ./antigravity
+(cd agy && go test ./...)
+docker build -t ax-agy ./agy
 ```
