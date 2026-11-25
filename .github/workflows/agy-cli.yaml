@@ -25,12 +25,6 @@ on:
       - 'agy-cli/**'
       - '.github/workflows/agy-cli.yaml'
   workflow_dispatch:
-    inputs:
-      agy_version:
-        description: 'Antigravity CLI version pinned in install-agy.sh (empty uses the pinned default)'
-        required: false
-        default: ''
-        type: string
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -49,14 +43,6 @@ jobs:
           persist-credentials: false
       - name: Test ax-launcher
         run: agy-cli/test_harness.sh
-      - name: Dockerfile AGY_VERSION matches install-agy.sh
-        run: |
-          pinned="$(sed -n 's/^PINNED_VERSION="\(.*\)"$/\1/p' agy-cli/install-agy.sh)"
-          arg="$(sed -n 's/^ARG AGY_VERSION=//p' agy-cli/Dockerfile)"
-          if [[ -z "${pinned}" || "${pinned}" != "${arg}" ]]; then
-            echo "::error::Dockerfile ARG AGY_VERSION=${arg} must equal PINNED_VERSION=${pinned} in install-agy.sh"
-            exit 1
-          fi
 
   build-and-verify:
     name: Build & verify (${{ matrix.arch }})
@@ -70,35 +56,13 @@ jobs:
           - arch: arm64
             runner: ubuntu-24.04-arm
     runs-on: ${{ matrix.runner }}
-    env:
-      # Empty builds the Dockerfile's AGY_VERSION (the version pinned in
-      # install-agy.sh).
-      AGY_VERSION: ${{ inputs.agy_version }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      # Both builds are checked explicitly, so the checks don't depend on the
-      # Dockerfile's default. Releases always build PREINSTALL_AGY=false (see
-      # release.yaml) until the licensing question in #15 is answered.
-      - name: Build and verify the runtime-install image (no agy inside)
+      - name: Build and verify the image
         run: |
-          img="ax-agy-cli:runtime-${{ matrix.arch }}"
-          docker build \
-            --build-arg PREINSTALL_AGY=false \
-            ${AGY_VERSION:+--build-arg "AGY_VERSION=${AGY_VERSION}"} \
-            -t "${img}" \
-            agy-cli
-          agy-cli/verify_image.sh "${img}" runtime
-
-      - name: Build and verify the bundled image (pinned agy inside, not pushed)
-        run: |
-          img="ax-agy-cli:bundled-${{ matrix.arch }}"
-          docker build \
-            --build-arg PREINSTALL_AGY=true \
-            ${AGY_VERSION:+--build-arg "AGY_VERSION=${AGY_VERSION}"} \
-            -t "${img}" \
-            agy-cli
-          agy-cli/verify_image.sh "${img}" bundled
-          docker rmi "${img}" >/dev/null
+          img="ax-agy-cli:${{ matrix.arch }}"
+          docker build -t "${img}" agy-cli
+          agy-cli/verify_image.sh "${img}"
