@@ -14,8 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# ax-harness: Antigravity CLI (agy) launcher for the AX in-container wrapper
-# contract.
+# ax-launcher (installed from agy-cli/ax-harness): Antigravity CLI (agy)
+# launcher for the AX in-container wrapper contract.
 #
 # Inputs provided by the mounted AX runner (see runner/launcher.go in
 # github.com/google/ax):
@@ -30,7 +30,7 @@
 #                       state survives suspend/resume and follow-up turns resume
 #                       with --continue while keeping HOME intact
 #   AX_OUTPUT_FILE      optional path the agent's final answer is written to
-#                       (AX reports it as status.outcome.output)
+#                       (<workspace>/.ax/output by default)
 #   cwd                 the task's workspace
 #
 # Optional environment variables:
@@ -49,11 +49,11 @@
 
 set -euo pipefail
 
-goal_file="${AX_GOAL_FILE:?AX_GOAL_FILE is not set; ax-harness must be started by the AX runner}"
+goal_file="${AX_GOAL_FILE:?AX_GOAL_FILE is not set; ax-launcher must be started by the AX runner}"
 config_file="${AX_CONFIG_FILE:-}"
 
 if [[ ! -s "${goal_file}" ]]; then
-  echo "ax-harness: empty goal in ${goal_file}; set spec.goal.text" >&2
+  echo "ax-launcher: empty goal in ${goal_file}; set spec.goal.text" >&2
   exit 2
 fi
 
@@ -72,7 +72,7 @@ export HOME="${HOME:-/root}"
 resume_session="false"
 if [[ -n "${session_id}" ]]; then
   if [[ ! "${session_id}" =~ ^[A-Za-z0-9._-]+$ || "${session_id}" == "." || "${session_id}" == ".." ]]; then
-    echo "ax-harness: invalid session ID ${session_id:?} in ${session_file}" >&2
+    echo "ax-launcher: invalid session ID ${session_id:?} in ${session_file}" >&2
     exit 2
   fi
   session_dir="${AX_SESSION_DIR:-${PWD}/.ax/sessions/${session_id}}"
@@ -108,7 +108,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 AGY_BIN="${AGY_BIN:-agy}"
 if ! command -v "${AGY_BIN}" >/dev/null 2>&1; then
   if [[ "${AGY_RUNTIME_INSTALL:-}" != "true" ]]; then
-    echo "ax-harness: ${AGY_BIN} not found; use an image built with PREINSTALL_AGY=true or set AGY_RUNTIME_INSTALL=true" >&2
+    echo "ax-launcher: ${AGY_BIN} not found; use an image built with PREINSTALL_AGY=true or set AGY_RUNTIME_INSTALL=true" >&2
     exit 127
   fi
   default_installer="/usr/local/share/ax/install-agy.sh"
@@ -116,12 +116,12 @@ if ! command -v "${AGY_BIN}" >/dev/null 2>&1; then
     default_installer="${SCRIPT_DIR}/install-agy.sh"
   fi
   installer="${AGY_INSTALL_SCRIPT:-${default_installer}}"
-  echo "ax-harness: ${AGY_BIN} not found on PATH; installing agy ${AGY_VERSION:-(pinned)} to ${install_dir}..." >&2
+  echo "ax-launcher: ${AGY_BIN} not found on PATH; installing agy ${AGY_VERSION:-(pinned)} to ${install_dir}..." >&2
   "${installer}" "${AGY_VERSION:-}" "${install_dir}"
 fi
 
 if ! command -v "${AGY_BIN}" >/dev/null 2>&1; then
-  echo "ax-harness: ${AGY_BIN} is still not available on PATH after install" >&2
+  echo "ax-launcher: ${AGY_BIN} is still not available on PATH after install" >&2
   exit 127
 fi
 
@@ -150,7 +150,7 @@ for name in sorted(servers):
     elif kind == "stdio" and srv.get("command"):
         args = ["--type", "stdio", name, "--", srv["command"], *map(str, srv.get("args") or [])]
     else:
-        print(f"ax-harness: skipping MCP server {name!r} with neither url nor command", file=sys.stderr)
+        print(f"ax-launcher: skipping MCP server {name!r} with neither url nor command", file=sys.stderr)
         continue
     for item in args + [""]:
         sys.stdout.buffer.write(item.encode("utf-8") + b"\0")
@@ -163,7 +163,7 @@ PY
       server+=("${item}")
       continue
     fi
-    echo "ax-harness: registering MCP server ${server[2]}" >&2
+    echo "ax-launcher: registering MCP server ${server[2]}" >&2
     "${AGY_BIN}" mcp add "${server[@]}" >&2
     server=()
   done

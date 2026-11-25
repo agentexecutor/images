@@ -16,9 +16,9 @@
 #
 # By default (PREINSTALL_AGY=true), the image installs the pinned Antigravity
 # CLI into /usr/local/bin at build time, alongside Debian packages,
-# /usr/local/share/ax/install-agy.sh, and /usr/local/bin/ax-harness. Pass
+# /usr/local/share/ax/install-agy.sh, and /usr/local/bin/ax-launcher. Pass
 # --build-arg PREINSTALL_AGY=false for a runtime-install image with no agy
-# binary, where ax-harness installs the pinned agy on startup only when a task
+# binary, where ax-launcher installs the pinned agy on startup only when a task
 # sets AGY_RUNTIME_INSTALL=true. Published images are runtime-install builds
 # until shipping the agy binary is cleared (see release.yaml).
 FROM debian:bookworm-slim@sha256:734a72b3d6142a71993b4bc580ca01d8ca687f77a2c422d96a961d3376b179bc
@@ -52,12 +52,13 @@ LABEL io.agentexecutor.agy.version="${AGY_VERSION}"
 ENV AGY_CLI_DISABLE_AUTO_UPDATE=true \
     AGY_VERSION="${AGY_VERSION}"
 
-# ax-harness installs agy at runtime into <workspace>/.ax/bin. Putting the
+# ax-launcher installs agy at runtime into <workspace>/.ax/bin. Putting the
 # default workspace's copy on PATH lets `ax ssh` sessions, which never run the
 # launcher, find it too. It goes last, so a leftover workspace copy never
 # shadows an agy installed in the image. Tasks that change the workspace path
 # don't get this.
 ENV PATH="${PATH}:/workspace/.ax/bin"
 
-COPY ax-harness /usr/local/bin/ax-harness
-RUN chmod 0755 /usr/local/bin/ax-harness
+COPY ax-harness /usr/local/bin/ax-launcher
+RUN chmod 0755 /usr/local/bin/ax-launcher \
+    && ln -s ax-launcher /usr/local/bin/ax-harness
