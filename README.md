@@ -17,7 +17,7 @@ tasks and images.
 
 | Image | Description | Source | Reference |
 | --- | --- | --- | --- |
-| `agy-cli` | Headless [Antigravity CLI](https://antigravity.google/docs/cli/install) with the `ax-harness` launcher. Published without the `agy` binary; it is installed when the task starts. | [`agy-cli/`](agy-cli/README.md) | `ghcr.io/agentexecutor/agy-cli@sha256:<digest>` |
+| `agy-cli` | Headless [Antigravity CLI](https://antigravity.google/docs/cli/install) with the `ax-launcher` launcher; tools run inside the task's sandbox. | [`agy-cli/`](agy-cli/README.md) | `ghcr.io/agentexecutor/agy-cli@sha256:<digest>` |
 | `agy` | Runs a [Gemini API Managed Agent](https://ai.google.dev/gemini-api/docs/agents) (Antigravity by default); tool calls run in the task's sandbox. | [`agy/`](agy/README.md) | `ghcr.io/agentexecutor/agy@sha256:<digest>` |
 
 `:latest` is never moved; reference images by digest. The digests of each

@@ -25,9 +25,6 @@ workflow. It builds each image for linux/amd64 and linux/arm64 and pushes it to
 - **Not published:** anything for Anthropic. We aren't doing Anthropic at all
   to start with, so `claude-code` and the `mock-anthropic` test server are
   left out.
-- The published `agy-cli` image doesn't contain the `agy` binary for now
-  ([#15](https://github.com/agentexecutor/images/issues/15)). A task installs
-  it when it starts; see the [agy-cli image README](../agy-cli/README.md).
 - `:latest` is never moved. Reference images by digest.
 - Rerunning the workflow for a tag doesn't rebuild images that already exist,
   so the digests of a release don't change.
